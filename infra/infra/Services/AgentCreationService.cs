@@ -44,6 +44,23 @@ internal sealed class AgentCreationService : IAgentCreationService
         {
             try
             {
+                // Respect the CreateAgent flag: only create when explicitly true
+                if (def.CreateAgent != true)
+                {
+                    if (_taskTracker != null)
+                    {
+                        _taskTracker.AddLog($"[yellow]Skipping creation for agent: [cyan]{def.Name}[/] (createAgent != true)[/]");
+                        _taskTracker.IncrementProgress();
+                    }
+                    else
+                    {
+                        AnsiConsole.MarkupLine($"[yellow]Skipping creation for agent: [cyan]{def.Name}[/] (createAgent != true)[/]");
+                        table.AddRow($"[cyan]{def.Name}[/]", "[grey]Skipped[/]", "");
+                    }
+
+                    continue;
+                }
+
                 if (_taskTracker != null)
                 {
                     _taskTracker.AddLog($"[grey]Creating agent: [cyan]{def.Name}[/][/]");

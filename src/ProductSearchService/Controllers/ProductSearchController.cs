@@ -1,6 +1,8 @@
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.Agents.AI;
+using Microsoft.AspNetCore.Mvc;
 using SharedEntities;
+using ZavaAgentsMetadata;
+using ZavaMAFLocal;
 
 namespace ProductSearchService.Controllers;
 
@@ -13,35 +15,44 @@ public class ProductSearchController : ControllerBase
 
     public ProductSearchController(
         ILogger<ProductSearchController> logger,
-        AIAgent agentFxAgent)
+        MAFLocalAgentProvider localAgentProvider)
     {
         _logger = logger;
-        _agentFxAgent = agentFxAgent;
+        _agentFxAgent = localAgentProvider.GetAgentByName(AgentMetadata.GetAgentName(AgentType.ProductSearchAgent));
     }
 
     [HttpPost("search/llm")]
     public async Task<ActionResult<ToolRecommendation[]>> SearchInventoryLlmAsync([FromBody] InventorySearchRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("[LLM] Searching inventory for query: {SearchQuery}", request.SearchQuery);
+        _logger.LogInformation($"{AgentMetadata.LogPrefixes.Llm} Searching inventory for query: {{SearchQuery}}", request.SearchQuery);
 
         // LLM endpoint uses MAF under the hood since we removed SK
         return await SearchProductsAsync(
             request,
             InvokeAgentFrameworkAsync,
-            "[LLM]",
+            AgentMetadata.LogPrefixes.Llm,
             cancellationToken);
     }
 
-    [HttpPost("search/maf")]
+    [HttpPost("search/maf")]  // Using constant AgentMetadata.FrameworkIdentifiers.Maf
     public async Task<ActionResult<ToolRecommendation[]>> SearchInventoryMAFAsync([FromBody] InventorySearchRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("[MAF] Searching inventory for query: {SearchQuery}", request.SearchQuery);
+        _logger.LogInformation($"{AgentMetadata.LogPrefixes.Maf} Searching inventory for query: {{SearchQuery}}", request.SearchQuery);
 
         return await SearchProductsAsync(
             request,
             InvokeAgentFrameworkAsync,
-            "[MAF]",
+            AgentMetadata.LogPrefixes.Maf,
             cancellationToken);
+    }
+
+    [HttpPost("search/directcall")]
+    public ActionResult<ToolRecommendation[]> SearchInventoryDirectCallAsync([FromBody] InventorySearchRequest request)
+    {
+        _logger.LogInformation("[DirectCall] Searching inventory for query: {SearchQuery}", request.SearchQuery);
+
+        // DirectCall mode bypasses AI orchestration and returns fallback response immediately
+        return Ok(BuildFallbackRecommendations(request.SearchQuery));
     }
 
     [HttpGet("search/{sku}")]

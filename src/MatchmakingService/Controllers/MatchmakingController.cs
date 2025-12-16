@@ -1,9 +1,11 @@
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.Agents.AI;
+using Microsoft.AspNetCore.Mvc;
 using SharedEntities;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using ZavaAgentsMetadata;
+using ZavaMAFLocal;
 
 namespace MatchmakingService.Controllers;
 
@@ -16,35 +18,44 @@ public class MatchmakingController : ControllerBase
 
     public MatchmakingController(
         ILogger<MatchmakingController> logger,
-        AIAgent agentFxAgent)
+        MAFLocalAgentProvider localAgentProvider)
     {
         _logger = logger;
-        _agentFxAgent = agentFxAgent;
+        _agentFxAgent = localAgentProvider.GetAgentByName(AgentMetadata.GetAgentName(AgentType.ProductMatchmakingAgent));
     }
 
     [HttpPost("alternatives/llm")]
     public async Task<ActionResult<MatchmakingResult>> FindAlternativesLlmAsync([FromBody] AlternativesRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("[LLM] Finding alternatives for product: {ProductQuery}, User: {UserId}", request.ProductQuery, request.UserId);
+        _logger.LogInformation($"{AgentMetadata.LogPrefixes.Llm} Finding alternatives for product: {{ProductQuery}}, User: {{UserId}}", request.ProductQuery, request.UserId);
 
         // LLM endpoint uses MAF under the hood since we removed SK
         return await FindAlternativesAsync(
             request,
             InvokeAgentFrameworkAsync,
-            "[LLM]",
+            AgentMetadata.LogPrefixes.Llm,
             cancellationToken);
     }
 
-    [HttpPost("alternatives/maf")]
+    [HttpPost("alternatives/maf")]  // Using constant AgentMetadata.FrameworkIdentifiers.Maf
     public async Task<ActionResult<MatchmakingResult>> FindAlternativesMAFAsync([FromBody] AlternativesRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("[MAF] Finding alternatives for product: {ProductQuery}, User: {UserId}", request.ProductQuery, request.UserId);
+        _logger.LogInformation($"{AgentMetadata.LogPrefixes.Maf} Finding alternatives for product: {{ProductQuery}}, User: {{UserId}}", request.ProductQuery, request.UserId);
 
         return await FindAlternativesAsync(
             request,
             InvokeAgentFrameworkAsync,
-            "[MAF]",
+            AgentMetadata.LogPrefixes.Maf,
             cancellationToken);
+    }
+
+    [HttpPost("alternatives/directcall")]
+    public ActionResult<MatchmakingResult> FindAlternativesDirectCallAsync([FromBody] AlternativesRequest request)
+    {
+        _logger.LogInformation("[DirectCall] Finding alternatives for product: {ProductQuery}, User: {UserId}", request.ProductQuery, request.UserId);
+
+        // DirectCall mode bypasses AI orchestration and returns fallback response immediately
+        return Ok(BuildFallbackResult(request));
     }
 
     private async Task<ActionResult<MatchmakingResult>> FindAlternativesAsync(

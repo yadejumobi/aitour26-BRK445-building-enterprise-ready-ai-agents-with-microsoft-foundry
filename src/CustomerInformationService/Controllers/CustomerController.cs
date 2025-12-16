@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Agents.AI;
 using SharedEntities;
-using System.Text.Json;
+using ZavaAgentsMetadata;
 
 namespace CustomerInformationService.Controllers;
 
@@ -10,98 +9,126 @@ namespace CustomerInformationService.Controllers;
 public class CustomerController : ControllerBase
 {
     private readonly ILogger<CustomerController> _logger;
-    private readonly AIAgent _agentFxAgent;
-
-    private static readonly Dictionary<string, CustomerInformation> _customers = new()
-    {
-        { "1", new CustomerInformation { Id = "1", Name = "John Smith", OwnedTools = new[] { "hammer", "screwdriver", "measuring tape" }, Skills = new[] { "basic DIY", "painting" } } },
-        { "2", new CustomerInformation { Id = "2", Name = "Sarah Johnson", OwnedTools = new[] { "drill", "saw", "level", "hammer" }, Skills = new[] { "intermediate DIY", "woodworking", "tiling" } } },
-        { "3", new CustomerInformation { Id = "3", Name = "Mike Davis", OwnedTools = new[] { "basic toolkit" }, Skills = new[] { "beginner DIY" } } }
-    };
+    private readonly DataServiceClient.DataServiceClient _dataServiceClient;
 
     public CustomerController(
         ILogger<CustomerController> logger,
-        AIAgent agentFxAgent)
+        DataServiceClient.DataServiceClient dataServiceClient)
     {
         _logger = logger;
-        _agentFxAgent = agentFxAgent;
+        _dataServiceClient = dataServiceClient;
     }
 
     [HttpGet("{customerId}/llm")]
     public async Task<ActionResult<CustomerInformation>> GetCustomerLlmAsync(string customerId, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("[LLM] Getting customer information for ID: {CustomerId}", customerId);
+        _logger.LogInformation($"{AgentMetadata.LogPrefixes.Llm} Getting customer information for ID: {{CustomerId}}", customerId);
 
-        // LLM endpoint uses MAF under the hood since we removed SK
-        return await GetCustomerAsync(
-            customerId,
-            async (prompt, token) => await InvokeAgentFrameworkAsync(prompt, token),
-            "[LLM]",
-            cancellationToken);
+        // Use DataServiceClient directly instead of LLM/Agent
+        return await GetCustomerFromDataServiceAsync(customerId, AgentMetadata.LogPrefixes.Llm, cancellationToken);
     }
 
-    [HttpGet("{customerId}/maf")]
-    public async Task<ActionResult<CustomerInformation>> GetCustomerMAFAsync(string customerId, CancellationToken cancellationToken)
+    [HttpGet("{customerId}/maf_local")]  // Using constant AgentMetadata.FrameworkIdentifiers.MafLocal
+    public async Task<ActionResult<CustomerInformation>> GetCustomerMAFLocalAsync(string customerId, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("[MAF] Getting customer information for ID: {CustomerId}", customerId);
+        _logger.LogInformation($"{AgentMetadata.LogPrefixes.MafLocal} Getting customer information for ID: {{CustomerId}}", customerId);
 
-        return await GetCustomerAsync(
-            customerId,
-            async (prompt, token) => await InvokeAgentFrameworkAsync(prompt, token),
-            "[MAF]",
-            cancellationToken);
+        // Use DataServiceClient directly instead of Agent
+        return await GetCustomerFromDataServiceAsync(customerId, AgentMetadata.LogPrefixes.MafLocal, cancellationToken);
+    }
+
+    [HttpGet("{customerId}/maf_foundry")]  // Using constant AgentMetadata.FrameworkIdentifiers.MafFoundry
+    public async Task<ActionResult<CustomerInformation>> GetCustomerMAFFoundryAsync(string customerId, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation($"{AgentMetadata.LogPrefixes.MafFoundry} Getting customer information for ID: {{CustomerId}}", customerId);
+
+        // Use DataServiceClient directly instead of Agent
+        return await GetCustomerFromDataServiceAsync(customerId, AgentMetadata.LogPrefixes.MafFoundry, cancellationToken);
     }
 
     [HttpPost("match-tools/llm")]
-    public ActionResult<ToolMatchResult> MatchToolsLlm([FromBody] ToolMatchRequest request)
+    public async Task<ActionResult<ToolMatchResult>> MatchToolsLlm([FromBody] ToolMatchRequest request)
     {
-        _logger.LogInformation("[LLM] Matching tools for customer {CustomerId}", request.CustomerId);
-        return MatchToolsInternal(request);
+        _logger.LogInformation($"{AgentMetadata.LogPrefixes.Llm} Matching tools for customer {{CustomerId}}", request.CustomerId);
+        // Use DataServiceClient to get customer information
+        return await MatchToolsInternal(request, AgentMetadata.LogPrefixes.Llm);
     }
 
-    [HttpPost("match-tools/maf")]
-    public ActionResult<ToolMatchResult> MatchToolsMAF([FromBody] ToolMatchRequest request)
+    [HttpPost("match-tools/maf_local")]  // Using constant AgentMetadata.FrameworkIdentifiers.MafLocal
+    public async Task<ActionResult<ToolMatchResult>> MatchToolsMAF([FromBody] ToolMatchRequest request)
     {
-        _logger.LogInformation("[MAF] Matching tools for customer {CustomerId}", request.CustomerId);
-        return MatchToolsInternal(request);
+        _logger.LogInformation($"{AgentMetadata.LogPrefixes.MafLocal} Matching tools for customer {{CustomerId}}", request.CustomerId);
+        // Use DataServiceClient to get customer information
+        return await MatchToolsInternal(request, AgentMetadata.LogPrefixes.MafLocal);
     }
 
-    private async Task<ActionResult<CustomerInformation>> GetCustomerAsync(
+    [HttpGet("{customerId}/directcall")]
+    public async Task<ActionResult<CustomerInformation>> GetCustomerDirectCallAsync(string customerId)
+    {
+        _logger.LogInformation($"{AgentMetadata.LogPrefixes.DirectCall} Getting customer information for ID: {{CustomerId}}", customerId);
+
+        // add a sleep of 1 seconds to emulate the analysis time
+        Thread.Sleep(1000);
+
+        // Use DataServiceClient to get customer information
+        return await GetCustomerFromDataServiceAsync(customerId, AgentMetadata.LogPrefixes.DirectCall, CancellationToken.None);
+    }
+
+    [HttpPost("match-tools/directcall")]
+    public async Task<ActionResult<ToolMatchResult>> MatchToolsDirectCall([FromBody] ToolMatchRequest request)
+    {
+        _logger.LogInformation($"{AgentMetadata.LogPrefixes.DirectCall} Matching tools for customer {{CustomerId}}", request.CustomerId);
+        // Use DataServiceClient to get customer information
+        return await MatchToolsInternal(request, AgentMetadata.LogPrefixes.DirectCall);
+    }
+
+    private async Task<ActionResult<CustomerInformation>> GetCustomerFromDataServiceAsync(
         string customerId,
-        Func<string, CancellationToken, Task<string>> invokeAgent,
         string logPrefix,
         CancellationToken cancellationToken)
     {
-        var prompt = BuildCustomerPrompt(customerId);
-
         try
         {
-            var agentResponse = await invokeAgent(prompt, cancellationToken);
-            _logger.LogInformation("{Prefix} Raw agent response length: {Length}", logPrefix, agentResponse.Length);
-
-            if (TryParseCustomer(agentResponse, out var customer))
+            _logger.LogInformation("{Prefix} Retrieving customer {CustomerId} from DataService", logPrefix, customerId);
+            
+            var customer = await _dataServiceClient.GetCustomerByIdAsync(customerId, cancellationToken);
+            
+            if (customer != null)
             {
-                _logger.LogInformation("{Prefix} Returning customer {CustomerId} from agent response", logPrefix, customer.Id);
+                _logger.LogInformation("{Prefix} Successfully retrieved customer {CustomerId} from DataService", logPrefix, customer.Id);
                 return Ok(customer);
             }
-
-            _logger.LogWarning("{Prefix} Parsing failed. Falling back to local store. Raw: {Raw}", logPrefix, TrimForLog(agentResponse));
+            
+            _logger.LogWarning("{Prefix} Customer {CustomerId} not found in DataService, returning fallback", logPrefix, customerId);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "{Prefix} Agent invocation failed. Falling back to local store.", logPrefix);
+            _logger.LogError(ex, "{Prefix} Error retrieving customer {CustomerId} from DataService", logPrefix, customerId);
         }
 
-        return Ok(GetFallbackCustomer(customerId));
+        return Ok(await GetFallbackCustomer(customerId));
     }
 
-    private ActionResult<ToolMatchResult> MatchToolsInternal(ToolMatchRequest request)
+    private async Task<ActionResult<ToolMatchResult>> MatchToolsInternal(ToolMatchRequest request, string logPrefix)
     {
         try
         {
-            var customer = GetFallbackCustomer(request.CustomerId);
+            _logger.LogInformation("{Prefix} Retrieving customer {CustomerId} from DataService for tool matching", logPrefix, request.CustomerId);
+            
+            // Get customer from DataServiceClient
+            var customer = await _dataServiceClient.GetCustomerByIdAsync(request.CustomerId);
+            
+            if (customer == null)
+            {
+                _logger.LogWarning("{Prefix} Customer {CustomerId} not found, using fallback", logPrefix, request.CustomerId);
+                customer = await GetFallbackCustomer(request.CustomerId);
+            }
+            
             var reusableTools = DetermineReusableTools(customer.OwnedTools, request.DetectedMaterials, request.Prompt);
             var missingTools = DetermineMissingTools(customer.OwnedTools, request.DetectedMaterials, request.Prompt);
+
+            _logger.LogInformation("{Prefix} Tool matching completed for customer {CustomerId}: {ReusableCount} reusable, {MissingCount} missing", 
+                logPrefix, request.CustomerId, reusableTools.Length, missingTools.Length);
 
             return Ok(new ToolMatchResult
             {
@@ -111,27 +138,29 @@ public class CustomerController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error matching tools for customer {CustomerId}", request.CustomerId);
+            _logger.LogError(ex, "{Prefix} Error matching tools for customer {CustomerId}", logPrefix, request.CustomerId);
             return StatusCode(500, "An error occurred while matching tools");
         }
     }
 
-    private async Task<string> InvokeAgentFrameworkAsync(string prompt, CancellationToken cancellationToken)
+    private async Task<CustomerInformation> GetFallbackCustomer(string customerId)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var thread = _agentFxAgent.GetNewThread();
-        var response = await _agentFxAgent.RunAsync(prompt, thread);
-        return response?.Text ?? string.Empty;
-    }
-
-    private static CustomerInformation GetFallbackCustomer(string customerId)
-    {
-        if (_customers.TryGetValue(customerId, out var customer))
+        // Try to get from DataService first
+        try
         {
-            return customer;
+            var customer = await _dataServiceClient.GetCustomerByIdAsync(customerId);
+            if (customer != null)
+            {
+                _logger.LogInformation("Retrieved customer {CustomerId} from DataService", customerId);
+                return customer;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to retrieve customer from DataService, using default");
         }
 
+        // Return default if not found
         return new CustomerInformation
         {
             Id = customerId,
@@ -141,8 +170,7 @@ public class CustomerController : ControllerBase
         };
     }
 
-    private static string BuildCustomerPrompt(string customerId) =>
-        $"Return a single JSON object (no surrounding text) that matches the shape of the CustomerInformation model. Find the customer information for the following customer ID: {customerId} and return the customer data as JSON.";
+
 
     private static string[] DetermineReusableTools(string[] ownedTools, string[] detectedMaterials, string prompt)
     {
@@ -212,80 +240,5 @@ public class CustomerController : ControllerBase
         return missing.ToArray();
     }
 
-    #region JSON & utility helpers
 
-    private static bool TryParseCustomer(string agentResponse, out CustomerInformation customer)
-    {
-        customer = default!;
-        if (string.IsNullOrWhiteSpace(agentResponse))
-        {
-            return false;
-        }
-
-        var json = ExtractFirstJsonObject(agentResponse);
-        if (json is null)
-        {
-            return false;
-        }
-
-        try
-        {
-            var result = JsonSerializer.Deserialize<CustomerInformation>(json, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
-
-            if (result is null || string.IsNullOrWhiteSpace(result.Id))
-            {
-                return false;
-            }
-
-            customer = result;
-            return true;
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
-    }
-
-    private static string? ExtractFirstJsonObject(string input)
-    {
-        if (string.IsNullOrEmpty(input))
-        {
-            return null;
-        }
-
-        var start = input.IndexOf('{');
-        if (start < 0)
-        {
-            return null;
-        }
-
-        var depth = 0;
-        for (var i = start; i < input.Length; i++)
-        {
-            var c = input[i];
-            if (c == '{')
-            {
-                depth++;
-            }
-            else if (c == '}')
-            {
-                depth--;
-            }
-
-            if (depth == 0)
-            {
-                return input.Substring(start, i - start + 1).Trim();
-            }
-        }
-
-        return null;
-    }
-
-    private static string TrimForLog(string value, int maxLength = 400)
-        => value.Length <= maxLength ? value : value[..maxLength] + "...";
-
-    #endregion
 }

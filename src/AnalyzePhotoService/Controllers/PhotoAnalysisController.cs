@@ -2,6 +2,8 @@ using Microsoft.Agents.AI;
 using Microsoft.AspNetCore.Mvc;
 using SharedEntities;
 using System.Text.Json;
+using ZavaAgentsMetadata;
+using ZavaMAFLocal;
 
 namespace AnalyzePhotoService.Controllers;
 
@@ -14,10 +16,10 @@ public class PhotoAnalysisController : ControllerBase
 
     public PhotoAnalysisController(
         ILogger<PhotoAnalysisController> logger,
-        AIAgent agentFxAgent)
+        MAFLocalAgentProvider localAgentProvider)
     {
         _logger = logger;
-        _agentFxAgent = agentFxAgent;
+        _agentFxAgent = localAgentProvider.GetAgentByName(AgentMetadata.GetAgentName(AgentType.PhotoAnalyzerAgent));
     }
 
     [HttpPost("analyzellm")]
@@ -28,33 +30,74 @@ public class PhotoAnalysisController : ControllerBase
             return BadRequest("No image file was provided.");
         }
 
-        _logger.LogInformation("[LLM] Analyzing photo. Prompt: {Prompt}", prompt);
+        _logger.LogInformation($"{AgentMetadata.LogPrefixes.Llm} Analyzing photo. Prompt: {{Prompt}}", prompt);
 
         // LLM endpoint uses MAF under the hood since we removed SK
         return await AnalyzeWithAgentAsync(
             prompt,
             image.FileName,
             async (analysisPrompt) => await GetAgentFxResponseAsync(analysisPrompt),
-            "[LLM]",
+            AgentMetadata.LogPrefixes.Llm,
             cancellationToken);
     }
 
-    [HttpPost("analyzemaf")]
-    public async Task<ActionResult<PhotoAnalysisResult>> AnalyzeMAFAsync([FromForm] IFormFile image, [FromForm] string prompt, CancellationToken cancellationToken = default)
+    [HttpPost("analyzemaf_local")]  // Using constant AgentMetadata.FrameworkIdentifiers.MafLocal
+    public async Task<ActionResult<PhotoAnalysisResult>> AnalyzeMAFLocalAsync([FromForm] IFormFile image, [FromForm] string prompt, CancellationToken cancellationToken = default)
     {
         if (image is null)
         {
             return BadRequest("No image file was provided.");
         }
 
-        _logger.LogInformation("[MAF] Analyzing photo. Prompt: {Prompt}", prompt);
+        _logger.LogInformation($"{AgentMetadata.LogPrefixes.MafLocal} Analyzing photo. Prompt: {{Prompt}}", prompt);
 
         return await AnalyzeWithAgentAsync(
             prompt,
             image.FileName,
             async (analysisPrompt) => await GetAgentFxResponseAsync(analysisPrompt),
-            "[MAF]",
+            AgentMetadata.LogPrefixes.MafLocal,
             cancellationToken);
+    }
+
+    [HttpPost("analyzemaf_foundry")]  // Using constant AgentMetadata.FrameworkIdentifiers.MafFoundry
+    public async Task<ActionResult<PhotoAnalysisResult>> AnalyzeMAFFoundryAsync([FromForm] IFormFile image, [FromForm] string prompt, CancellationToken cancellationToken = default)
+    {
+        if (image is null)
+        {
+            return BadRequest("No image file was provided.");
+        }
+
+        _logger.LogInformation($"{AgentMetadata.LogPrefixes.MafFoundry} Analyzing photo. Prompt: {{Prompt}}", prompt);
+
+        return await AnalyzeWithAgentAsync(
+            prompt,
+            image.FileName,
+            async (analysisPrompt) => await GetAgentFxResponseAsync(analysisPrompt),
+            AgentMetadata.LogPrefixes.MafFoundry,
+            cancellationToken);
+    }
+
+    [HttpPost("analyzedirectcall")]
+    public async Task<ActionResult<PhotoAnalysisResult>> AnalyzeDirectCallAsync([FromForm] IFormFile image, [FromForm] string prompt, CancellationToken cancellationToken = default)
+    {
+        if (image is null)
+        {
+            return BadRequest("No image file was provided.");
+        }
+
+        _logger.LogInformation("[DirectCall] Analyzing photo. Prompt: {Prompt}", prompt);
+
+        // add a sleep of 3 seconds to emulate the image analysis time
+        await Task.Delay(3000);
+
+        // Fallback path.
+        var fallbackDescription = BuildFallbackDescription(prompt);
+        var fallback = new PhotoAnalysisResult
+        {
+            Description = fallbackDescription,
+            DetectedMaterials = DetermineDetectedMaterials(prompt, image.FileName)
+        };
+        return Ok(fallback);
     }
 
     // Shared high-level analysis routine for both endpoints.

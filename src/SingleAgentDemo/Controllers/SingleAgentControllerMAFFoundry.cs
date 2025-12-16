@@ -1,244 +1,397 @@
 using Microsoft.Agents.AI;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.AI;
 using SharedEntities;
-using System.Text;
-using ZavaFoundryAgentsProvider;
+using SingleAgentDemo.Services;
+using System.ComponentModel;
+using System.Text.Json;
+using ZavaAgentsMetadata;
+using ZavaMAFFoundry;
 
 namespace SingleAgentDemo.Controllers;
 
 /// <summary>
-/// Controller for single agent analysis using Microsoft Agent Framework with Foundry Agents.
-/// Demonstrates direct agent invocation using RunStreamingAsync without workflow orchestration.
+/// Controller for single agent analysis using Microsoft Agent Framework with Foundry Agent.
+/// Uses a single agent from Foundry with MCP tools that call HTTP services for photo analysis, customer info, reasoning, and inventory.
 /// </summary>
 [ApiController]
-[Route("api/singleagent/maf_foundry")]
+[Route("api/singleagent/maf_foundry")]  // Using constant AgentMetadata.FrameworkIdentifiers.MafFoundry
 public class SingleAgentControllerMAFFoundry : ControllerBase
 {
     private readonly ILogger<SingleAgentControllerMAFFoundry> _logger;
-    private readonly IServiceProvider _serviceProvider;
-
+    private readonly AIAgent _orchestratorAgent;
+    private readonly AnalyzePhotoService _analyzePhotoService;
+    private readonly CustomerInformationService _customerInformationService;
+    private readonly ToolReasoningService _toolReasoningService;
+    private readonly InventoryService _inventoryService;
+    private readonly IConfiguration _config;
+    private readonly List<AITool> _tools;
+        
     public SingleAgentControllerMAFFoundry(
         ILogger<SingleAgentControllerMAFFoundry> logger,
-        IServiceProvider serviceProvider)
+        IConfiguration config,
+        MAFFoundryAgentProvider foundryAgentProvider,
+        AnalyzePhotoService analyzePhotoService,
+        CustomerInformationService customerInformationService,
+        ToolReasoningService toolReasoningService,
+        InventoryService inventoryService)
     {
         _logger = logger;
-        _serviceProvider = serviceProvider;
+        _analyzePhotoService = analyzePhotoService;
+        _customerInformationService = customerInformationService;
+        _toolReasoningService = toolReasoningService;
+        _inventoryService = inventoryService;
+
+        // Set framework for all services to use maf endpoints
+        _analyzePhotoService.SetFramework(AgentMetadata.FrameworkIdentifiers.MafFoundry);
+        _customerInformationService.SetFramework(AgentMetadata.FrameworkIdentifiers.MafFoundry);
+        _toolReasoningService.SetFramework(AgentMetadata.FrameworkIdentifiers.MafFoundry);
+        _inventoryService.SetFramework(AgentMetadata.FrameworkIdentifiers.MafFoundry);
+
+        // Create tools that call HTTP services
+        _tools =
+        [
+            AIFunctionFactory.Create(PerformPhotoAnalysis),
+            AIFunctionFactory.Create(GetCustomerInformation),
+            AIFunctionFactory.Create(PerformToolReasoning),
+            AIFunctionFactory.Create(PerformInventoryCheck)
+        ];
+
+        var agentName = "ZavaSingleAgent2";
+        var chatDeploymentName = config["AI_ChatDeploymentName"] ?? "gpt-5-mini";
+        var instructions = ZavaAgentsMetadata.AgentMetadata.GetAgentInstructions(ZavaAgentsMetadata.AgentType.ZavaSingleAgent);
+
+        // Get the agent from Microsoft Foundry
+        _orchestratorAgent = foundryAgentProvider.GetOrCreateAIAgent(
+            agentName: agentName, 
+            model: chatDeploymentName, 
+            agentInstructions: instructions,
+            tools: _tools);
+
+        _logger.LogInformation($"SingleAgentControllerMAFFoundry initialized with Foundry agent '{agentName}' and {_tools.Count} MCP tools");
     }
 
     /// <summary>
-    /// Analyze an image using a sequential multi-agent approach with Foundry Agents.
+    /// Analyze an image using a single Foundry agent with MCP tools that call HTTP services.
     /// </summary>
-    /// <param name="image">The image to analyze.</param>
-    /// <param name="prompt">The task description for the analysis.</param>
-    /// <param name="customerId">The customer identifier.</param>
-    /// <param name="useSharedThread">When true, uses a single thread for all agent executions (maintains context). When false, creates a new thread per agent.</param>
     [HttpPost("analyze")]
     public async Task<ActionResult<SingleAgentAnalysisResponse>> AnalyzeAsync(
         [FromForm] IFormFile image,
         [FromForm] string prompt,
-        [FromForm] string customerId,
-        [FromForm] bool useSharedThread = true)
+        [FromForm] string customerId)
     {
         try
         {
             _logger.LogInformation(
-                "Starting analysis for customer {CustomerId} using MAF Foundry Agents (SharedThread: {UseSharedThread})",
-                customerId, useSharedThread);
+                "Starting analysis for customer {CustomerId} using MAF Foundry Agent with MCP Tools",
+                customerId);
 
-            var agents = GetAgents();
-            AgentThread? sharedThread = useSharedThread ? agents.PhotoAnalyzer.GetNewThread() : null;
+            // Store image data in a temporary field for tool access
+            _currentImage = image;
+            _currentPrompt = prompt;
+            _currentCustomerId = customerId;
 
-            // Step 1: Photo Analysis
-            var photoAnalysisResult = await ExecuteAgentStreamingAsync(
-                agents.PhotoAnalyzer,
-                "PhotoAnalyzer",
-                $"Analyze the uploaded image '{image.FileName}' for the following task: {prompt}. Identify materials, surfaces, and project requirements.",
-                useSharedThread ? sharedThread : null);
+            // Create thread and chat options with tools
+            var agentThread = _orchestratorAgent.GetNewThread();
+            //var chatOptions = new ChatOptions
+            //{
+            //    Tools = [.. _tools]
+            //};
 
-            // Step 2: Customer Information
-            var customerInfoResult = await ExecuteAgentStreamingAsync(
-                agents.CustomerInformation,
-                "CustomerInformation",
-                $"Retrieve customer information for customer ID: {customerId}. Include their owned tools, skills, and project history.",
-                useSharedThread ? sharedThread : null);
+            var analysisPrompt = $@"Analyze the uploaded image for customer {customerId} with the task: {prompt}
 
-            // Step 3: Tool Reasoning (depends on steps 1 & 2)
-            var reasoningPrompt = BuildReasoningPrompt(photoAnalysisResult, customerInfoResult, prompt);
-            var reasoningResult = await ExecuteAgentStreamingAsync(
-                agents.ToolReasoning,
-                "ToolReasoning",
-                reasoningPrompt,
-                useSharedThread ? sharedThread : null);
+Please follow these steps:
+1. Use PerformPhotoAnalysis to analyze the image and identify materials
+2. Use GetCustomerInformation to retrieve the customer's profile
+3. Use PerformToolReasoning to determine what tools are needed
+4. Use PerformInventoryCheck to check availability and pricing
 
-            // Step 4: Inventory Check (depends on step 3)
-            var inventoryPrompt = $"Based on the tool reasoning: {reasoningResult}, check inventory availability and pricing for the recommended tools.";
-            var inventoryResult = await ExecuteAgentStreamingAsync(
-                agents.Inventory,
-                "Inventory",
-                inventoryPrompt,
-                useSharedThread ? sharedThread : null);
+Provide a comprehensive analysis based on all tool results.";
 
-            _logger.LogInformation("Analysis complete for customer {CustomerId}", customerId);
+            _logger.LogInformation("Executing Foundry orchestrator agent with 4 MCP tools");
 
-            return Ok(BuildResponse(photoAnalysisResult, customerInfoResult, reasoningResult, inventoryResult, prompt, useSharedThread));
+            // Execute the agent with all tools
+            var response = await _orchestratorAgent.RunAsync(
+                message: analysisPrompt,
+                thread: agentThread);
+                //, options: new ChatClientAgentRunOptions(chatOptions));
+
+            var result = response.Text;
+
+            _logger.LogInformation("Agent execution completed, result length: {Length}", result.Length);
+
+            // Build response from collected tool outputs
+            var analysisResponse = BuildResponseFromToolOutputs(result, prompt);
+
+            _logger.LogInformation("Analysis complete for customer {CustomerId} using MAF Foundry Agent with MCP Tools", customerId);
+
+            return Ok(analysisResponse);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error in analysis for customer {CustomerId}", customerId);
-            return StatusCode(500, "An error occurred while processing your request");
+            _logger.LogError(ex, "Error in analysis for customer {CustomerId} using MAF Foundry Agent with MCP Tools", customerId);
+            
+            // Return fallback response on error
+            return Ok(BuildFallbackResponse(prompt, customerId));
+        }
+        finally
+        {
+            // Clean up temporary data
+            _currentImage = null;
+            _currentPrompt = null;
+            _currentCustomerId = null;
         }
     }
 
-    /// <summary>
-    /// Executes an agent using RunStreamingAsync (direct invocation without workflows).
-    /// </summary>
-    private async Task<string> ExecuteAgentStreamingAsync(
-        AIAgent agent,
-        string agentName,
-        string prompt,
-        AgentThread? thread)
+    // Temporary storage for current request data (used by tools)
+    private IFormFile? _currentImage;
+    private string? _currentPrompt;
+    private string? _currentCustomerId;
+
+    // ===== MCP Tool Implementations =====
+    // Each tool calls an HTTP service to perform its task
+
+    [Description("Analyzes an uploaded photo to identify materials, surfaces, and project requirements.")]
+    private async Task<string> PerformPhotoAnalysis(
+        [Description("The description of the analysis task")]
+        string taskDescription)
     {
         var startTime = DateTime.UtcNow;
-        _logger.LogInformation("Executing agent: {AgentName}", agentName);
+        _logger.LogInformation("MCP Tool: PerformPhotoAnalysis called for task: {Task}", taskDescription);
 
         try
         {
-            var resultBuilder = new StringBuilder();
-            var agentThread = thread ?? agent.GetNewThread();
-
-            await foreach (var update in agent.RunStreamingAsync(prompt, agentThread))
+            if (_currentImage == null || _currentPrompt == null)
             {
-                var text = update.Text;
-                if (!string.IsNullOrEmpty(text))
+                _logger.LogWarning("PerformPhotoAnalysis: Missing image or prompt data");
+                _photoAnalysisResult = new PhotoAnalysisResult
                 {
-                    resultBuilder.Append(text);
-                    _logger.LogDebug("Agent {AgentName} streaming: {Text}", agentName, text);
-                }
+                    Description = $"Analysis for task: {taskDescription}. Detected typical DIY project.",
+                    DetectedMaterials = ["paint", "wall", "surface"]
+                };
+                return JsonSerializer.Serialize(_photoAnalysisResult);
             }
 
-            var result = resultBuilder.ToString();
+            _photoAnalysisResult = await _analyzePhotoService.AnalyzePhotoAsync(_currentImage, _currentPrompt);
             var duration = DateTime.UtcNow - startTime;
             
             _logger.LogInformation(
-                "Agent {AgentName} completed in {Duration:F0}ms, result length: {Length}",
-                agentName, duration.TotalMilliseconds, result.Length);
+                "MCP Tool: PerformPhotoAnalysis completed in {Duration}ms. Detected {Count} materials",
+                duration.TotalMilliseconds, _photoAnalysisResult.DetectedMaterials.Length);
 
-            return string.IsNullOrWhiteSpace(result) ? GetFallbackResponse(agentName, prompt) : result;
+            return JsonSerializer.Serialize(_photoAnalysisResult);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Agent {AgentName} failed", agentName);
-            return GetFallbackResponse(agentName, prompt);
+            _logger.LogError(ex, "MCP Tool: PerformPhotoAnalysis failed");
+            _photoAnalysisResult = new PhotoAnalysisResult
+            {
+                Description = $"Fallback analysis for task: {taskDescription}",
+                DetectedMaterials = ["paint", "wall", "surface"]
+            };
+            return JsonSerializer.Serialize(_photoAnalysisResult);
         }
     }
 
-    /// <summary>
-    /// Retrieves all required agents from dependency injection.
-    /// </summary>
-    private (AIAgent PhotoAnalyzer, AIAgent CustomerInformation, AIAgent ToolReasoning, AIAgent Inventory) GetAgents()
+    [Description("Retrieves customer profile information including owned tools and skills.")]
+    private async Task<string> GetCustomerInformation(
+        [Description("The customer ID to retrieve information for")]
+        string customerId)
     {
-        return (
-            PhotoAnalyzer: _serviceProvider.GetRequiredKeyedService<AIAgent>(
-                AgentNamesProvider.GetAgentName(AgentNamesProvider.AgentName.PhotoAnalyzerAgent)),
-            CustomerInformation: _serviceProvider.GetRequiredKeyedService<AIAgent>(
-                AgentNamesProvider.GetAgentName(AgentNamesProvider.AgentName.CustomerInformationAgent)),
-            ToolReasoning: _serviceProvider.GetRequiredKeyedService<AIAgent>(
-                AgentNamesProvider.GetAgentName(AgentNamesProvider.AgentName.ToolReasoningAgent)),
-            Inventory: _serviceProvider.GetRequiredKeyedService<AIAgent>(
-                AgentNamesProvider.GetAgentName(AgentNamesProvider.AgentName.InventoryAgent))
-        );
+        var startTime = DateTime.UtcNow;
+        _logger.LogInformation("MCP Tool: GetCustomerInformation called for customer: {CustomerId}", customerId);
+
+        try
+        {
+            var customerIdToUse = string.IsNullOrEmpty(customerId) ? _currentCustomerId : customerId;
+            if (string.IsNullOrEmpty(customerIdToUse))
+            {
+                _logger.LogWarning("GetCustomerInformation: Missing customer ID");
+                _customerInfo = new CustomerInformation
+                {
+                    Id = "unknown",
+                    Name = "Unknown Customer",
+                    OwnedTools = ["hammer", "screwdriver"],
+                    Skills = ["basic DIY"]
+                };
+                return JsonSerializer.Serialize(_customerInfo);
+            }
+
+            _customerInfo = await _customerInformationService.GetCustomerInformationAsync(customerIdToUse);
+            var duration = DateTime.UtcNow - startTime;
+            
+            _logger.LogInformation(
+                "MCP Tool: GetCustomerInformation completed in {Duration}ms. Customer has {Count} tools",
+                duration.TotalMilliseconds, _customerInfo.OwnedTools.Length);
+
+            return JsonSerializer.Serialize(_customerInfo);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "MCP Tool: GetCustomerInformation failed");
+            _customerInfo = new CustomerInformation
+            {
+                Id = customerId ?? "unknown",
+                Name = $"Customer {customerId}",
+                OwnedTools = ["hammer", "screwdriver", "measuring tape"],
+                Skills = ["basic DIY"]
+            };
+            return JsonSerializer.Serialize(_customerInfo);
+        }
     }
 
-    private static string BuildReasoningPrompt(string photoAnalysis, string customerInfo, string prompt)
+    [Description("Determines what tools are needed based on photo analysis and customer information.")]
+    private async Task<string> PerformToolReasoning(
+        [Description("Context about the photo analysis and customer")]
+        string context)
     {
-        return $"Based on the photo analysis: {photoAnalysis} and customer info: {customerInfo}, " +
-               $"determine what tools are needed for the project: {prompt}. Consider the customer's existing tools and skills.";
+        var startTime = DateTime.UtcNow;
+        _logger.LogInformation("MCP Tool: PerformToolReasoning called");
+
+        try
+        {
+            // Use stored photo analysis and customer info, or provide defaults
+            var photoAnalysis = _photoAnalysisResult ?? new PhotoAnalysisResult
+            {
+                Description = "Default analysis",
+                DetectedMaterials = ["paint", "wall"]
+            };
+
+            var customer = _customerInfo ?? new CustomerInformation
+            {
+                Id = _currentCustomerId ?? "unknown",
+                Name = "Customer",
+                OwnedTools = ["hammer"],
+                Skills = ["basic DIY"]
+            };
+
+            var reasoningRequest = new ReasoningRequest
+            {
+                PhotoAnalysis = photoAnalysis,
+                Customer = customer,
+                Prompt = _currentPrompt ?? "DIY project"
+            };
+
+            _toolReasoningResult = await _toolReasoningService.GenerateReasoningAsync(reasoningRequest);
+            var duration = DateTime.UtcNow - startTime;
+            
+            _logger.LogInformation(
+                "MCP Tool: PerformToolReasoning completed in {Duration}ms, result length: {Length}",
+                duration.TotalMilliseconds, _toolReasoningResult.Length);
+
+            return _toolReasoningResult;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "MCP Tool: PerformToolReasoning failed");
+            _toolReasoningResult = $"Based on the analysis, additional tools are recommended for {_currentPrompt ?? "the project"}.";
+            return _toolReasoningResult;
+        }
     }
 
-    private SingleAgentAnalysisResponse BuildResponse(
-        string photoAnalysis,
-        string customerInfo,
-        string toolReasoning,
-        string inventoryInfo,
-        string prompt,
-        bool usedSharedThread)
+    [Description("Checks inventory availability and pricing for recommended tools.")]
+    private async Task<string> PerformInventoryCheck(
+        [Description("List of tool SKUs or names to check, comma-separated")]
+        string tools)
+    {
+        var startTime = DateTime.UtcNow;
+        _logger.LogInformation("MCP Tool: PerformInventoryCheck called for tools: {Tools}", tools);
+
+        try
+        {
+            // Parse tools from comma-separated string or extract from reasoning result
+            var toolArray = tools.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            
+            if (toolArray.Length == 0)
+            {
+                // Extract tool names from reasoning result as fallback
+                toolArray = ["PAINT-ROLLER-9IN", "BRUSH-SET-3PC", "DROP-CLOTH-9X12"];
+            }
+
+            var toolRecommendations = toolArray.Select(tool => new ToolRecommendation 
+            { 
+                Sku = tool,
+                Name = tool 
+            }).ToArray();
+
+            _inventoryResult = await _inventoryService.EnrichWithInventoryAsync(toolRecommendations);
+            var duration = DateTime.UtcNow - startTime;
+            
+            _logger.LogInformation(
+                "MCP Tool: PerformInventoryCheck completed in {Duration}ms. Checked {Count} tools",
+                duration.TotalMilliseconds, _inventoryResult.Length);
+
+            return JsonSerializer.Serialize(_inventoryResult);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "MCP Tool: PerformInventoryCheck failed");
+            _inventoryResult =
+            [
+                new ToolRecommendation { Name = "Paint Roller", Sku = "PAINT-ROLLER-9IN", IsAvailable = true, Price = 12.99m, Description = "9-inch paint roller" },
+                new ToolRecommendation { Name = "Paint Brush Set", Sku = "BRUSH-SET-3PC", IsAvailable = true, Price = 24.99m, Description = "3-piece brush set" }
+            ];
+            return JsonSerializer.Serialize(_inventoryResult);
+        }
+    }
+
+    // Storage for tool outputs
+    private PhotoAnalysisResult? _photoAnalysisResult;
+    private CustomerInformation? _customerInfo;
+    private string? _toolReasoningResult;
+    private ToolRecommendation[]? _inventoryResult;
+
+    // ===== Helper Methods =====
+
+    private SingleAgentAnalysisResponse BuildResponseFromToolOutputs(string agentOutput, string prompt)
     {
         return new SingleAgentAnalysisResponse
         {
-            Analysis = photoAnalysis,
-            ReusableTools = ExtractReusableTools(customerInfo),
-            RecommendedTools = ExtractToolRecommendations(inventoryInfo),
-            Reasoning = GenerateSummary(photoAnalysis, customerInfo, toolReasoning, inventoryInfo, prompt, usedSharedThread)
+            Analysis = _photoAnalysisResult?.Description ?? "Photo analysis completed",
+            ReusableTools = _customerInfo?.OwnedTools ?? ["hammer", "screwdriver"],
+            RecommendedTools = _inventoryResult ?? 
+            [
+                new ToolRecommendation { Name = "Paint Roller", Sku = "PAINT-ROLLER-9IN", IsAvailable = true, Price = 12.99m, Description = "9-inch paint roller" },
+                new ToolRecommendation { Name = "Paint Brush Set", Sku = "BRUSH-SET-3PC", IsAvailable = true, Price = 24.99m, Description = "3-piece brush set" }
+            ],
+            Reasoning = GenerateSummary(agentOutput, prompt)
         };
     }
 
-    private static string[] ExtractReusableTools(string customerInfoResult)
+    private SingleAgentAnalysisResponse BuildFallbackResponse(string prompt, string customerId)
     {
-        if (string.IsNullOrEmpty(customerInfoResult))
-            return ["tape measure", "screwdriver", "hammer"];
-
-        var toolKeywords = new[] { "hammer", "screwdriver", "drill", "saw", "wrench", "pliers", "tape measure", "measuring tape", "level" };
-        var tools = toolKeywords
-            .Where(keyword => customerInfoResult.Contains(keyword, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
-        return tools.Count > 0 ? tools.ToArray() : ["tape measure", "screwdriver", "hammer"];
+        return new SingleAgentAnalysisResponse
+        {
+            Analysis = $"Image analysis completed for task: {prompt}. Detected typical DIY project requirements.",
+            ReusableTools = ["hammer", "screwdriver", "measuring tape"],
+            RecommendedTools =
+            [
+                new ToolRecommendation { Name = "Paint Roller", Sku = "PAINT-ROLLER-9IN", IsAvailable = true, Price = 12.99m, Description = "9-inch paint roller for smooth walls" },
+                new ToolRecommendation { Name = "Paint Brush Set", Sku = "BRUSH-SET-3PC", IsAvailable = true, Price = 24.99m, Description = "3-piece brush set for detail work" },
+                new ToolRecommendation { Name = "Drop Cloth", Sku = "DROP-CLOTH-9X12", IsAvailable = true, Price = 8.99m, Description = "Plastic drop cloth protection" }
+            ],
+            Reasoning = $"[Fallback Response]\nAnalysis completed for customer {customerId} with task: {prompt}\nRecommended tools are available."
+        };
     }
 
-    private static ToolRecommendation[] ExtractToolRecommendations(string inventoryResult)
+    private string GenerateSummary(string agentOutput, string prompt)
     {
-        // Production: parse structured agent response
-        return
-        [
-            new() { Name = "Paint Roller", Sku = "PAINT-ROLLER-9IN", IsAvailable = true, Price = 12.99m, Description = "9-inch paint roller for smooth walls" },
-            new() { Name = "Paint Brush Set", Sku = "BRUSH-SET-3PC", IsAvailable = true, Price = 24.99m, Description = "3-piece brush set for detail work" },
-            new() { Name = "Drop Cloth", Sku = "DROP-CLOTH-9X12", IsAvailable = true, Price = 8.99m, Description = "Plastic drop cloth protection" }
-        ];
-    }
-
-    private static string GenerateSummary(
-        string photoAnalysis,
-        string customerInfo,
-        string toolReasoning,
-        string inventoryInfo,
-        string prompt,
-        bool usedSharedThread)
-    {
-        var threadMode = usedSharedThread 
-            ? "Shared thread (context preserved between agents)" 
-            : "Separate threads (independent agent executions)";
-        
         return string.Join(Environment.NewLine,
-            "=== Microsoft Agent Framework Analysis (Foundry Agents) ===",
+            "=== Microsoft Agent Framework Analysis (Foundry Agent with MCP Tools) ===",
             "",
-            $"Execution Mode: RunStreamingAsync (direct invocation, no workflow orchestration)",
-            $"Thread Mode: {threadMode}",
+            "Execution Mode: Single Foundry Agent (ZavaSingleAgent) with 4 MCP Tools",
+            "- Tool 1: PerformPhotoAnalysis (via HTTP to AnalyzePhotoService)",
+            "- Tool 2: GetCustomerInformation (via HTTP to CustomerInformationService)",
+            "- Tool 3: PerformToolReasoning (via HTTP to ToolReasoningService)",
+            "- Tool 4: PerformInventoryCheck (via HTTP to InventoryService)",
             "",
             $"Project Task: {prompt}",
             "",
-            "Step 1 - Photo Analysis:",
-            photoAnalysis,
-            "",
-            "Step 2 - Customer Profile:",
-            customerInfo,
-            "",
-            "Step 3 - Tool Reasoning:",
-            toolReasoning,
-            "",
-            "Step 4 - Inventory Check:",
-            inventoryInfo,
+            "Agent Output:",
+            agentOutput,
             "",
             "Summary:",
-            "This analysis used direct agent invocation via RunStreamingAsync for real-time streaming responses.",
-            "Each agent processed its task sequentially, with results passed to subsequent agents for context.");
+            "This analysis used a single Foundry agent (ZavaSingleAgent) with MCP tools that call HTTP services.",
+            "Each tool makes an HTTP request to the appropriate microservice for specialized processing.");
     }
-
-    private static string GetFallbackResponse(string agentName, string prompt) => agentName switch
-    {
-        "PhotoAnalyzer" => $"Image analysis completed for task: {prompt}. Detected typical DIY project requirements including surface preparation and finishing work.",
-        "CustomerInformation" => "Customer profile retrieved. Customer has basic DIY tools including hammer, screwdriver, and measuring tape.",
-        "ToolReasoning" => $"Based on the project requirements for '{prompt}', recommended tools include appropriate brushes, rollers, and preparation materials.",
-        "Inventory" => "Inventory check completed. Recommended tools are available in stock with current pricing.",
-        _ => $"Agent {agentName} completed processing for: {prompt}"
-    };
 }

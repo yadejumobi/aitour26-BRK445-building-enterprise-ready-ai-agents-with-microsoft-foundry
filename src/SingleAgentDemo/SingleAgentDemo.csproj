@@ -7,22 +7,29 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<PackageReference Include="Aspire.Azure.AI.OpenAI" Version="13.0.2-preview.1.25603.5" />
 		<PackageReference Include="Microsoft.Agents.AI.Workflows" Version="1.0.0-preview.251204.1" />
-		<PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" />
+		<PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.1" />
 		<PackageReference Include="Swashbuckle.AspNetCore" Version="10.0.1" />
+		<!-- DevUI packages for agent debugging and visualization -->
+		<PackageReference Include="Microsoft.Agents.AI" Version="1.0.0-preview.251204.1" />
+		<PackageReference Include="Microsoft.Agents.AI.Abstractions" Version="1.0.0-preview.251204.1" />
+		<PackageReference Include="Microsoft.Agents.AI.DevUI" Version="1.0.0-preview.251204.1" />
+		<PackageReference Include="Microsoft.Agents.AI.Hosting" Version="1.0.0-preview.251204.1" />
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\ZavaFoundryAgentsProvider\ZavaFoundryAgentsProvider.csproj" />
-		<ProjectReference Include="..\ZavaMAFAgentsProvider\ZavaMAFAgentsProvider.csproj" />
-		<ProjectReference Include="..\ZavaMAFLocalAgentsProvider\ZavaMAFLocalAgentsProvider.csproj" />
+		<ProjectReference Include="..\DataServiceClient\DataServiceClient.csproj" />
+		<ProjectReference Include="..\ZavaAgentsMetadata\ZavaAgentsMetadata.csproj" />
+		<ProjectReference Include="..\ZavaMAFFoundry\ZavaMAFFoundry.csproj" />
+		<ProjectReference Include="..\ZavaMAFLocal\ZavaMAFLocal.csproj" />
 		<ProjectReference Include="..\ZavaWorkingModes\ZavaWorkingModes.csproj" />
 		<ProjectReference Include="..\ZavaServiceDefaults\ZavaServiceDefaults.csproj" />
 		<ProjectReference Include="..\SharedEntities\SharedEntities.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
-	  <Folder Include="Models\" />
+		<Folder Include="Models\" />
 	</ItemGroup>
 
 </Project>

@@ -1,10 +1,11 @@
 using Microsoft.Agents.AI;
+using ZavaAgentsMetadata;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.AI;
 using SharedEntities;
-using ZavaFoundryAgentsProvider;
-using ZavaMAFLocalAgentsProvider;
+using ZavaMAFLocal;
+using System.Diagnostics.Tracing;
 
 namespace MultiAgentDemo.Controllers;
 
@@ -13,18 +14,33 @@ namespace MultiAgentDemo.Controllers;
 /// Agents are created with gpt-5-mini model and configured locally with instructions and tools.
 /// </summary>
 [ApiController]
-[Route("api/multiagent/maf_local")]
+[Route("api/multiagent/maf_local")]  // Using constant AgentMetadata.FrameworkIdentifiers.MafLocal
 public class MultiAgentControllerMAFLocal : ControllerBase
 {
     private readonly ILogger<MultiAgentControllerMAFLocal> _logger;
-    private readonly MAFLocalAgentProvider _localAgentProvider;
+    private readonly AIAgent _productSearchAgent;
+    private readonly AIAgent _productMatchmakingAgent;
+    private readonly AIAgent _locationServiceAgent;
+    private readonly AIAgent _navigationAgent;
+
+    private readonly Workflow _sequentialWorkflow;
+    private readonly Workflow _concurrentWorkflow;
 
     public MultiAgentControllerMAFLocal(
         ILogger<MultiAgentControllerMAFLocal> logger,
         MAFLocalAgentProvider localAgentProvider)
     {
         _logger = logger;
-        _localAgentProvider = localAgentProvider;
+
+        // agents
+        _productSearchAgent = localAgentProvider.GetLocalAgentByName(AgentType.ProductSearchAgent);
+        _productMatchmakingAgent = localAgentProvider.GetLocalAgentByName(AgentType.ProductMatchmakingAgent);
+        _locationServiceAgent = localAgentProvider.GetLocalAgentByName(AgentType.LocationServiceAgent);
+        _navigationAgent = localAgentProvider.GetLocalAgentByName(AgentType.NavigationAgent);
+
+        // get workflows
+        _sequentialWorkflow = localAgentProvider.GetLocalWorkflowByName("SequentialWorkflow");
+        _concurrentWorkflow = localAgentProvider.GetLocalWorkflowByName("ConcurrentWorkflow");
     }
 
     /// <summary>
@@ -76,15 +92,15 @@ public class MultiAgentControllerMAFLocal : ControllerBase
 
         try
         {
-            var agents = GetLocalAgents();
-            var workflow = AgentWorkflowBuilder.BuildSequential([
-                agents.ProductSearch,
-                agents.ProductMatchmaking,
-                agents.LocationService,
-                agents.Navigation
-            ]);
+            // sample to show how the workflow can be built programmatically, but in this case we are using a pre-built workflow from the provider
+            //var workflow = AgentWorkflowBuilder.BuildSequential([
+            //    _productSearchAgent,
+            //    _productMatchmakingAgent,
+            //    _locationServiceAgent,
+            //    _navigationAgent
+            //]);
 
-            var workflowResponse = await RunWorkflowAsync(request, workflow, agents);
+            var workflowResponse = await RunWorkflowAsync(request, _sequentialWorkflow);
             return Ok(workflowResponse);
         }
         catch (Exception ex)
@@ -109,15 +125,15 @@ public class MultiAgentControllerMAFLocal : ControllerBase
 
         try
         {
-            var agents = GetLocalAgents();
-            var workflow = AgentWorkflowBuilder.BuildConcurrent([
-                agents.ProductSearch,
-                agents.ProductMatchmaking,
-                agents.LocationService,
-                agents.Navigation
-            ]);
+            // sample to show how the workflow can be built programmatically, but in this case we are using a pre-built workflow from the provider
+            //var workflow = AgentWorkflowBuilder.BuildConcurrent([
+            //    _productSearchAgent,
+            //    _productMatchmakingAgent,
+            //    _locationServiceAgent,
+            //    _navigationAgent
+            //]);
 
-            var workflowResponse = await RunWorkflowAsync(request, workflow, agents);
+            var workflowResponse = await RunWorkflowAsync(request, _concurrentWorkflow);
             return Ok(workflowResponse);
         }
         catch (Exception ex)
@@ -142,14 +158,13 @@ public class MultiAgentControllerMAFLocal : ControllerBase
 
         try
         {
-            var agents = GetLocalAgents();
-            var workflow = AgentWorkflowBuilder.CreateHandoffBuilderWith(agents.ProductSearch)
-                .WithHandoff(agents.ProductSearch, agents.ProductMatchmaking)
-                .WithHandoff(agents.ProductMatchmaking, agents.LocationService)
-                .WithHandoff(agents.LocationService, agents.Navigation)
+            var workflow = AgentWorkflowBuilder.CreateHandoffBuilderWith(_productSearchAgent)
+                .WithHandoff(_productSearchAgent, _productMatchmakingAgent)
+                .WithHandoff(_productMatchmakingAgent, _locationServiceAgent)
+                .WithHandoff(_locationServiceAgent, _navigationAgent)
                 .Build();
 
-            var workflowResponse = await RunWorkflowAsync(request, workflow, agents);
+            var workflowResponse = await RunWorkflowAsync(request, workflow);
             return Ok(workflowResponse);
         }
         catch (Exception ex)
@@ -174,13 +189,12 @@ public class MultiAgentControllerMAFLocal : ControllerBase
 
         try
         {
-            var agents = GetLocalAgents();
             var agentList = new List<AIAgent>
             {
-                agents.ProductSearch,
-                agents.ProductMatchmaking,
-                agents.LocationService,
-                agents.Navigation
+                _productSearchAgent,
+                _productMatchmakingAgent,
+                _locationServiceAgent,
+                _navigationAgent
             };
 
             var workflow = AgentWorkflowBuilder.CreateGroupChatBuilderWith(
@@ -188,7 +202,7 @@ public class MultiAgentControllerMAFLocal : ControllerBase
                 .AddParticipants(agentList)
                 .Build();
 
-            var workflowResponse = await RunWorkflowAsync(request, workflow, agents);
+            var workflowResponse = await RunWorkflowAsync(request, workflow);
             return Ok(workflowResponse);
         }
         catch (Exception ex)
@@ -206,7 +220,7 @@ public class MultiAgentControllerMAFLocal : ControllerBase
     {
         _logger.LogInformation("MagenticOne workflow requested for query: {ProductQuery}", request?.ProductQuery);
 
-        return StatusCode(501, 
+        return StatusCode(501,
             "The MagenticOne workflow is not yet implemented in the MAF Local framework. " +
             "Please use another orchestration type.");
     }
@@ -215,9 +229,8 @@ public class MultiAgentControllerMAFLocal : ControllerBase
     /// Executes a workflow and processes the streaming events.
     /// </summary>
     private async Task<MultiAgentResponse> RunWorkflowAsync(
-        MultiAgentRequest request, 
-        Workflow workflow,
-        (AIAgent ProductSearch, AIAgent ProductMatchmaking, AIAgent LocationService, AIAgent Navigation) agents)
+        MultiAgentRequest request,
+        Workflow workflow)
     {
         var orchestrationId = Guid.NewGuid().ToString();
         var steps = new List<AgentStep>();
@@ -228,15 +241,15 @@ public class MultiAgentControllerMAFLocal : ControllerBase
 
         await foreach (var evt in run.WatchStreamAsync().ConfigureAwait(false))
         {
-            ProcessWorkflowEvent(evt, steps, request, ref lastExecutorId, agents);
+            ProcessWorkflowEvent(evt, steps, request, ref lastExecutorId);
         }
 
         var mermaidChart = workflow.ToMermaidString();
-        
+
         var alternatives = await StepsProcessor.GetProductAlternativesFromStepsAsync(
-            steps, agents.ProductMatchmaking, _logger);
+            steps, _productMatchmakingAgent, _logger);
         var navigationInstructions = await StepsProcessor.GenerateNavigationInstructionsAsync(
-            steps, agents.Navigation, request.Location, request.ProductQuery, _logger);
+            steps, _navigationAgent, request.Location, request.ProductQuery, _logger);
 
         return new MultiAgentResponse
         {
@@ -257,8 +270,7 @@ public class MultiAgentControllerMAFLocal : ControllerBase
         WorkflowEvent evt,
         List<AgentStep> steps,
         MultiAgentRequest request,
-        ref string? lastExecutorId,
-        (AIAgent ProductSearch, AIAgent ProductMatchmaking, AIAgent LocationService, AIAgent Navigation) agents)
+        ref string? lastExecutorId)
     {
         switch (evt)
         {
@@ -273,12 +285,11 @@ public class MultiAgentControllerMAFLocal : ControllerBase
             case WorkflowOutputEvent outputEvent:
                 _logger.LogDebug("WorkflowOutput - SourceId: {SourceId}", outputEvent.SourceId);
                 var messages = outputEvent.As<List<ChatMessage>>() ?? [];
-                
+
                 foreach (var message in messages)
                 {
                     steps.Add(new AgentStep
                     {
-                        Agent = GetAgentDisplayName(message.AuthorName, agents),
                         AgentId = message.AuthorName ?? string.Empty,
                         Action = $"Processing - {request.ProductQuery}",
                         Result = message.Text,
@@ -290,34 +301,20 @@ public class MultiAgentControllerMAFLocal : ControllerBase
     }
 
     /// <summary>
-    /// Retrieves locally created agents.
-    /// </summary>
-    private (AIAgent ProductSearch, AIAgent ProductMatchmaking, AIAgent LocationService, AIAgent Navigation) GetLocalAgents()
-    {
-        return (
-            ProductSearch: _localAgentProvider.GetAgentByName(AgentNamesProvider.AgentName.ProductSearchAgent),
-            ProductMatchmaking: _localAgentProvider.GetAgentByName(AgentNamesProvider.AgentName.ProductMatchmakingAgent),
-            LocationService: _localAgentProvider.GetAgentByName(AgentNamesProvider.AgentName.LocationServiceAgent),
-            Navigation: _localAgentProvider.GetAgentByName(AgentNamesProvider.AgentName.NavigationAgent)
-        );
-    }
-
-    /// <summary>
     /// Converts agent ID to human-readable display name.
     /// </summary>
     private string GetAgentDisplayName(
-        string? agentId,
-        (AIAgent ProductSearch, AIAgent ProductMatchmaking, AIAgent LocationService, AIAgent Navigation) agents)
+        string? agentId)
     {
         if (string.IsNullOrEmpty(agentId))
             return "Unknown Agent";
-        
+
         return agentId switch
         {
-            _ when agentId == agents.LocationService.Id => "Location Service Agent (Local)",
-            _ when agentId == agents.Navigation.Id => "Navigation Agent (Local)",
-            _ when agentId == agents.ProductMatchmaking.Id => "Product Matchmaking Agent (Local)",
-            _ when agentId == agents.ProductSearch.Id => "Product Search Agent (Local)",
+            _ when agentId == _locationServiceAgent.Id => "Location Service Agent (Local)",
+            _ when agentId == _navigationAgent.Id => "Navigation Agent (Local)",
+            _ when agentId == _productMatchmakingAgent.Id => "Product Matchmaking Agent (Local)",
+            _ when agentId == _productSearchAgent.Id => "Product Search Agent (Local)",
             _ => agentId
         };
     }
@@ -327,17 +324,17 @@ public class MultiAgentControllerMAFLocal : ControllerBase
     /// </summary>
     private static string GetOrchestrationDescription(OrchestrationType orchestration) => orchestration switch
     {
-        OrchestrationType.Sequential => 
+        OrchestrationType.Sequential =>
             "Sequential workflow using MAF Local Agents (gpt-5-mini). Each agent step executes in order, with output feeding into subsequent steps.",
-        OrchestrationType.Concurrent => 
+        OrchestrationType.Concurrent =>
             "Concurrent workflow using MAF Local Agents (gpt-5-mini). All agents execute in parallel for independent analysis.",
-        OrchestrationType.Handoff => 
+        OrchestrationType.Handoff =>
             "Handoff workflow using MAF Local Agents (gpt-5-mini). Agents dynamically pass control based on context and branching logic.",
-        OrchestrationType.GroupChat => 
+        OrchestrationType.GroupChat =>
             "Group chat workflow using MAF Local Agents (gpt-5-mini). Agents collaborate in a round-robin conversation pattern.",
-        OrchestrationType.Magentic => 
+        OrchestrationType.Magentic =>
             "MagenticOne-inspired workflow for complex multi-agent collaboration.",
-        _ => 
+        _ =>
             "Multi-agent workflow using MAF Local Agents (gpt-5-mini)."
     };
 }

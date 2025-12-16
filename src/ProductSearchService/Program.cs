@@ -1,6 +1,6 @@
-using Microsoft.Agents.AI;
-using ZavaFoundryAgentsProvider;
-using ZavaMAFAgentsProvider;
+using ZavaMAFFoundry;
+using ZavaMAFLocal;
+using DataServiceClient;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,17 +11,29 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Register MAFAgentProvider for Microsoft Foundry integration
-var microsoftFoundryProjectConnection = builder.Configuration.GetConnectionString("microsoftfoundryproject");
-builder.Services.AddSingleton(_ => new MAFAgentProvider(microsoftFoundryProjectConnection!));
+// Add DataServiceClient for accessing DataService endpoints
+builder.Services.AddDataServiceClient("https+http://dataservice");
 
-// Register the ProductSearchAgent from Microsoft Foundry
-builder.Services.AddSingleton<AIAgent>(sp =>
-{
-    var agentId = AgentNamesProvider.GetAgentName(AgentNamesProvider.AgentName.ProductSearchAgent);
-    var provider = sp.GetRequiredService<MAFAgentProvider>();
-    return provider.GetAIAgent(agentId);
-});
+// Register MAF agent providers using new extension methods
+var microsoftFoundryProjectConnection = builder.Configuration.GetConnectionString("microsoftfoundryproject");
+
+// Register MAF Foundry agents (Microsoft Foundry)
+builder.AddMAFFoundryAgents(microsoftFoundryProjectConnection);
+
+var microsoftFoundryCnnString = builder.Configuration.GetConnectionString("microsoftfoundrycnnstring");
+var chatDeploymentName = builder.Configuration["AI_ChatDeploymentName"] ?? "gpt-5-mini";
+
+builder.AddAzureOpenAIClient(connectionName: "microsoftfoundrycnnstring",
+    configureSettings: settings =>
+    {
+        if (string.IsNullOrEmpty(settings.Key))
+        {
+            settings.Credential = new Azure.Identity.DefaultAzureCredential();
+        }
+    }).AddChatClient(chatDeploymentName);
+
+// Register MAF Local agents (locally created with IChatClient)
+builder.AddMAFLocalAgents();
 
 var app = builder.Build();
 

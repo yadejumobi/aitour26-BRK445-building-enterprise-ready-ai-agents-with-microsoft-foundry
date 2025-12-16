@@ -1,8 +1,9 @@
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.Agents.AI;
+using Microsoft.AspNetCore.Mvc;
 using SharedEntities;
-using System.Collections.Generic;
 using System.Text.Json;
+using ZavaAgentsMetadata;
+using ZavaMAFLocal;
 
 namespace LocationService.Controllers;
 
@@ -12,37 +13,40 @@ public class LocationController : ControllerBase
 {
     private readonly ILogger<LocationController> _logger;
     private readonly AIAgent _agentFxAgent;
+    private readonly DataServiceClient.DataServiceClient _dataServiceClient;
 
     public LocationController(
-        ILogger<LocationController> logger,
-        AIAgent agentFxAgent)
+        ILogger<LocationController> logger,        
+        DataServiceClient.DataServiceClient dataServiceClient,
+        MAFLocalAgentProvider localAgentProvider)
     {
         _logger = logger;
-        _agentFxAgent = agentFxAgent;
+        _dataServiceClient = dataServiceClient;
+        _agentFxAgent = localAgentProvider.GetAgentByName(AgentMetadata.GetAgentName(AgentType.LocationServiceAgent));
     }
 
     [HttpGet("find/llm")]
     public async Task<ActionResult<LocationResult>> FindProductLocationLlmAsync([FromQuery] string product, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("[LLM] Finding location for product: {Product}", product);
+        _logger.LogInformation($"{AgentMetadata.LogPrefixes.Llm} Finding location for product: {{Product}}", product);
 
         // LLM endpoint uses MAF under the hood since we removed SK
         return await FindProductLocationAsync(
             product,
             InvokeAgentFrameworkAsync,
-            "[LLM]",
+            AgentMetadata.LogPrefixes.Llm,
             cancellationToken);
     }
 
-    [HttpGet("find/maf")]
+    [HttpGet("find/maf")]  // Using constant AgentMetadata.FrameworkIdentifiers.Maf
     public async Task<ActionResult<LocationResult>> FindProductLocationMAFAsync([FromQuery] string product, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("[MAF] Finding location for product: {Product}", product);
+        _logger.LogInformation($"{AgentMetadata.LogPrefixes.Maf} Finding location for product: {{Product}}", product);
 
         return await FindProductLocationAsync(
             product,
             InvokeAgentFrameworkAsync,
-            "[MAF]",
+            AgentMetadata.LogPrefixes.Maf,
             cancellationToken);
     }
 
@@ -76,7 +80,7 @@ public class LocationController : ControllerBase
             _logger.LogWarning(ex, "{Prefix} Agent invocation failed. Using fallback locations.", logPrefix);
         }
 
-        return Ok(BuildFallbackResult(product));
+        return Ok(await BuildFallbackResult(product));
     }
 
     [HttpGet("health")]
@@ -94,11 +98,29 @@ public class LocationController : ControllerBase
         return response?.Text ?? string.Empty;
     }
 
-    private LocationResult BuildFallbackResult(string product)
-        => new()
+    private async Task<LocationResult> BuildFallbackResult(string product)
+    {
+        // Try to search locations from DataService first
+        try
+        {
+            var locations = await _dataServiceClient.SearchLocationsAsync(product);
+            if (locations != null && locations.Count > 0)
+            {
+                _logger.LogInformation("Retrieved {Count} locations from DataService for product: {Product}", locations.Count, product);
+                return new LocationResult { StoreLocations = locations.ToArray() };
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to retrieve locations from DataService");
+        }
+
+        // Fallback to generated locations
+        return new LocationResult
         {
             StoreLocations = GenerateLocationsByProduct(product)
         };
+    }
 
     private StoreLocation[] GenerateLocationsByProduct(string product)
     {

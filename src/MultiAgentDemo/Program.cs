@@ -1,9 +1,8 @@
-using Microsoft.Agents.AI;
-using MultiAgentDemo.AgentServices;
+using Microsoft.Agents.AI.DevUI;
 using MultiAgentDemo.Services;
-using ZavaFoundryAgentsProvider;
-using ZavaMAFAgentsProvider;
-using ZavaMAFLocalAgentsProvider;
+using ZavaMAFLocal;
+using ZavaMAFFoundry;
+using DataServiceClient;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,22 +13,32 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Register MAF agent providers using extension methods
+// Add DataServiceClient for accessing DataService endpoints
+builder.Services.AddDataServiceClient("https+http://dataservice", builder.Environment.IsDevelopment());
+
+// Register MAF agent providers using new extension methods
 var microsoftFoundryProjectConnection = builder.Configuration.GetConnectionString("microsoftfoundryproject");
 var microsoftFoundryCnnString = builder.Configuration.GetConnectionString("microsoftfoundrycnnstring");
 var chatDeploymentName = builder.Configuration["AI_ChatDeploymentName"] ?? "gpt-5-mini";
 
-// Register MAFAgentProvider for Microsoft Foundry integration
-if (!string.IsNullOrEmpty(microsoftFoundryProjectConnection))
-{
-    builder.Services.RegisterMAFAgentsFoundry(microsoftFoundryProjectConnection);
-}
+// Register MAF Foundry agents (Microsoft Foundry)
+builder.AddMAFFoundryAgents(microsoftFoundryProjectConnection);
 
-// Register MAFLocalAgentProvider for local agent creation
-if (!string.IsNullOrEmpty(microsoftFoundryCnnString))
-{
-    builder.Services.RegisterMAFAgentsLocal(microsoftFoundryCnnString, chatDeploymentName);
-}
+// Register MAF Local agents (locally created with IChatClient)
+// Register IChatClient for MAF Local agents
+builder.AddAzureOpenAIClient(connectionName: "microsoftfoundrycnnstring",
+    configureSettings: settings =>
+    {
+        if (string.IsNullOrEmpty(settings.Key))
+        {
+            settings.Credential = new Azure.Identity.DefaultAzureCredential();
+        }
+    }).AddChatClient(chatDeploymentName);
+
+builder.AddMAFLocalAgents();
+
+// add workflows
+builder.AddMAFLocalWorkflows();
 
 // Register HTTP clients for external services (used by LLM direct call and DirectCall modes)
 RegisterHttpClients(builder);
@@ -37,17 +46,46 @@ RegisterHttpClients(builder);
 // Register orchestration services for LLM mode
 RegisterOrchestrationServices(builder);
 
-// Register AI agents from Microsoft Foundry (used by MAF Foundry mode)
-RegisterFoundryAgents(builder);
+// Register services for OpenAI responses and conversations (required for DevUI)
+builder.Services.AddOpenAIResponses();
+builder.Services.AddOpenAIConversations();
+
+// Add DevUI for agent debugging and visualization
+builder.AddDevUI();
 
 var app = builder.Build();
 
 app.MapDefaultEndpoints();
 
+// Health logging endpoint for troubleshooting
+app.MapGet("/health/log", (ILogger<Program> logger, IConfiguration config) =>
+{
+    logger.LogInformation("MultiAgentDemo health/log requested");
+    var appInsights = config["APPLICATIONINSIGHTS_CONNECTION_STRING"] ?? config["appinsights"] ?? "<not-set>";
+    var foundryCnn = config.GetConnectionString("microsoftfoundrycnnstring") ?? "<not-set>";
+    var foundryProject = config.GetConnectionString("microsoftfoundryproject") ?? "<not-set>";
+    var env = config["ASPNETCORE_ENVIRONMENT"] ?? "<unknown>";
+
+    logger.LogInformation("MultiAgentDemo Config - Env: {Env}, AppInsights: {AppInsights}, FoundryCnn: {FoundryCnn}, FoundryProject: {FoundryProject}", env, appInsights, foundryCnn, foundryProject);
+
+    return Results.Ok(new {
+        service = "multiagentdemo",
+        env,
+        appInsights = string.IsNullOrEmpty(appInsights) ? "<not-set>" : "set",
+        microsoftFoundryConnection = string.IsNullOrEmpty(foundryCnn) ? "<not-set>" : "set",
+        microsoftFoundryProject = string.IsNullOrEmpty(foundryProject) ? "<not-set>" : "set"
+    });
+});
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+
+    // Map DevUI endpoints for agent debugging (development only)
+    app.MapOpenAIResponses();
+    app.MapOpenAIConversations();
+    app.MapDevUI();
 }
 
 app.UseHttpsRedirection();
@@ -61,17 +99,50 @@ app.Run();
 /// </summary>
 static void RegisterHttpClients(WebApplicationBuilder builder)
 {
-    builder.Services.AddHttpClient<InventoryAgentService>(
-        client => client.BaseAddress = new Uri("https+http://inventoryservice"));
+    if (builder.Environment.IsDevelopment())
+    {
+        builder.Services.AddHttpClient<InventoryAgentService>(
+            client => client.BaseAddress = new Uri("https+http://inventoryservice"))
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+            });
 
-    builder.Services.AddHttpClient<MatchmakingAgentService>(
-        client => client.BaseAddress = new Uri("https+http://matchmakingservice"));
+        builder.Services.AddHttpClient<MatchmakingAgentService>(
+            client => client.BaseAddress = new Uri("https+http://matchmakingservice"))
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+            });
 
-    builder.Services.AddHttpClient<LocationAgentService>(
-        client => client.BaseAddress = new Uri("https+http://locationservice"));
+        builder.Services.AddHttpClient<LocationAgentService>(
+            client => client.BaseAddress = new Uri("https+http://locationservice"))
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+            });
 
-    builder.Services.AddHttpClient<NavigationAgentService>(
-        client => client.BaseAddress = new Uri("https+http://navigationservice"));
+        builder.Services.AddHttpClient<NavigationAgentService>(
+            client => client.BaseAddress = new Uri("https+http://navigationservice"))
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+            });
+    }
+    else
+    {
+        builder.Services.AddHttpClient<InventoryAgentService>(
+            client => client.BaseAddress = new Uri("https+http://inventoryservice"));
+
+        builder.Services.AddHttpClient<MatchmakingAgentService>(
+            client => client.BaseAddress = new Uri("https+http://matchmakingservice"));
+
+        builder.Services.AddHttpClient<LocationAgentService>(
+            client => client.BaseAddress = new Uri("https+http://locationservice"));
+
+        builder.Services.AddHttpClient<NavigationAgentService>(
+            client => client.BaseAddress = new Uri("https+http://navigationservice"));
+    }
 }
 
 /// <summary>
@@ -84,22 +155,4 @@ static void RegisterOrchestrationServices(WebApplicationBuilder builder)
     builder.Services.AddScoped<HandoffOrchestrationService>();
     builder.Services.AddScoped<GroupChatOrchestrationService>();
     builder.Services.AddScoped<MagenticOrchestrationService>();
-}
-
-/// <summary>
-/// Registers AI agents from Microsoft Foundry for MAF Foundry mode.
-/// Each agent is registered as a keyed singleton for dependency injection.
-/// </summary>
-static void RegisterFoundryAgents(WebApplicationBuilder builder)
-{
-    foreach (AgentNamesProvider.AgentName agentName in Enum.GetValues<AgentNamesProvider.AgentName>())
-    {
-        var agentId = AgentNamesProvider.GetAgentName(agentName);
-
-        builder.Services.AddKeyedSingleton<AIAgent>(agentId, (sp, _) =>
-        {
-            var provider = sp.GetRequiredService<MAFAgentProvider>();
-            return provider.GetAIAgent(agentId);
-        });
-    }
 }

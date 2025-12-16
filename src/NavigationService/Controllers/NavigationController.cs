@@ -1,8 +1,9 @@
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.Agents.AI;
+using Microsoft.AspNetCore.Mvc;
 using SharedEntities;
-using System.Collections.Generic;
 using System.Text.Json;
+using ZavaAgentsMetadata;
+using ZavaMAFLocal;
 
 namespace NavigationService.Controllers;
 
@@ -15,35 +16,54 @@ public class NavigationController : ControllerBase
 
     public NavigationController(
         ILogger<NavigationController> logger,
-        AIAgent agentFxAgent)
+        MAFLocalAgentProvider localAgentProvider)
     {
         _logger = logger;
-        _agentFxAgent = agentFxAgent;
+        _agentFxAgent = localAgentProvider.GetAgentByName(AgentMetadata.GetAgentName(AgentType.NavigationAgent));
     }
 
     [HttpPost("directions/llm")]
     public async Task<ActionResult<NavigationInstructions>> GenerateDirectionsLlmAsync([FromBody] DirectionsRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("[LLM] Generating directions from {From} to {To}", FormatLocation(request.From), FormatLocation(request.To));
+        _logger.LogInformation($"{AgentMetadata.LogPrefixes.Llm} Generating directions from {{From}} to {{To}}", FormatLocation(request.From), FormatLocation(request.To));
 
         // LLM endpoint uses MAF under the hood since we removed SK
         return await GenerateDirectionsAsync(
             request,
             InvokeAgentFrameworkAsync,
-            "[LLM]",
+            AgentMetadata.LogPrefixes.Llm,
             cancellationToken);
     }
 
-    [HttpPost("directions/maf")]
+    [HttpPost("directions/maf")]  // Using constant AgentMetadata.FrameworkIdentifiers.Maf
     public async Task<ActionResult<NavigationInstructions>> GenerateDirectionsMAFAsync([FromBody] DirectionsRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("[MAF] Generating directions from {From} to {To}", FormatLocation(request.From), FormatLocation(request.To));
+        _logger.LogInformation($"{AgentMetadata.LogPrefixes.Maf} Generating directions from {{From}} to {{To}}", FormatLocation(request.From), FormatLocation(request.To));
 
         return await GenerateDirectionsAsync(
             request,
             InvokeAgentFrameworkAsync,
-            "[MAF]",
+            AgentMetadata.LogPrefixes.Maf,
             cancellationToken);
+    }
+
+    [HttpPost("directions/directcall")]
+    public ActionResult<NavigationInstructions> GenerateDirectionsDirectCallAsync([FromBody] DirectionsRequest request)
+    {
+        if (request is null)
+        {
+            return BadRequest("Request payload is required.");
+        }
+
+        if (request.From is null || request.To is null)
+        {
+            return BadRequest("Both origin and destination locations are required.");
+        }
+
+        _logger.LogInformation("[DirectCall] Generating directions from {From} to {To}", FormatLocation(request.From), FormatLocation(request.To));
+
+        // DirectCall mode bypasses AI orchestration and returns fallback response immediately
+        return Ok(BuildFallbackInstructions(request));
     }
 
     private async Task<ActionResult<NavigationInstructions>> GenerateDirectionsAsync(

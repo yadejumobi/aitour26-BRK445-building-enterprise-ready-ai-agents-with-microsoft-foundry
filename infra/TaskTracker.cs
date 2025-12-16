@@ -57,12 +57,17 @@ public class TaskTracker
         // Calculate total steps (will be updated with actual counts)
         _totalSteps = 1; // Start with environment setup
 
-        // Initialize activity log with 8 empty rows
-        for (int i = 0; i < 8; i++)
+        // Initialize activity log with 16 empty rows (increased since tasks now display horizontally)
+        for (int i = 0; i < 16; i++)
         {
             _logs.Add("[grey]...[/]");
         }
     }
+
+    private string _sqlServerConnectionString = string.Empty;
+
+    public string GetSqlServerConnectionString() => _sqlServerConnectionString;
+    public void SetSqlServerConnectionString(string connectionString) => _sqlServerConnectionString = connectionString;
 
     public void UpdateConfiguration(string projectEndpoint, string modelName, string tenantId)
     {
@@ -336,7 +341,9 @@ public class TaskTracker
         }
 
         // Always show input cell at bottom separated by a line
-        var inputContent = "[grey]" + new string('─', 60) + "[/]\n[bold yellow]> Input :keyboard:[/]\n[yellow on blue]" + (_currentInteraction ?? "") + "[/]";
+        // Use plain text rendering for input to avoid terminal rendering issues with masked characters
+        var safeInteraction = Markup.Escape(_currentInteraction ?? "");
+        var inputContent = "[grey]" + new string('─', 60) + "[/]\n[bold yellow]> Input :keyboard:[/]\n[cyan]" + safeInteraction + "[/]";
         table.AddRow(new Markup(inputContent));
 
         return table;
@@ -371,11 +378,14 @@ public class TaskTracker
         {
             lines.Add($"[cyan]{parentTask.Key}[/]");
 
+            // Display subtasks horizontally on a single line
+            var subTaskItems = new List<string>();
             foreach (var subTask in parentTask.Value)
             {
                 var checkMark = subTask.Value ? ":check_mark_button:" : ":white_large_square:";
-                lines.Add($"  {checkMark} {subTask.Key}");
+                subTaskItems.Add($"{checkMark} {subTask.Key}");
             }
+            lines.Add($"  {string.Join(" ", subTaskItems)}");
         }
 
         return string.Join("\n", lines);
@@ -383,9 +393,43 @@ public class TaskTracker
 
     private string BuildLogText()
     {
-        // Show last 8 rows, truncate long messages to prevent console breaking
-        var recentLogs = _logs.TakeLast(8).Select(log => TruncateLogMessage(log)).ToList();
+        // Show last 16 rows (increased since tasks now display horizontally), truncate long messages to prevent console breaking
+        var recentLogs = _logs.TakeLast(16).Select(log => SafeMarkupLog(log)).ToList();
         return string.Join("\n", recentLogs);
+    }
+
+    /// <summary>
+    /// Safely handles markup in log messages by escaping any invalid markup
+    /// </summary>
+    private string SafeMarkupLog(string message)
+    {
+        // First truncate the message
+        var truncated = TruncateLogMessage(message);
+        
+        // Try to validate if this is valid markup
+        try
+        {
+            // Test if Spectre.Console can parse this markup
+            _ = new Markup(truncated);
+            return truncated;
+        }
+        catch
+        {
+            // If markup parsing fails, escape the entire message and try to preserve basic color intent
+            // Check if it started with a color tag we can preserve
+            var colorMatch = System.Text.RegularExpressions.Regex.Match(message, @"^\[(red|green|yellow|cyan|blue|grey|white|bold|italic)\]");
+            if (colorMatch.Success)
+            {
+                var color = colorMatch.Groups[1].Value;
+                var content = message.Substring(colorMatch.Length);
+                // Remove closing tag if present
+                content = System.Text.RegularExpressions.Regex.Replace(content, @"\[/\]$", "");
+                return $"[{color}]{Markup.Escape(content)}[/]";
+            }
+            
+            // Otherwise just escape everything
+            return Markup.Escape(truncated);
+        }
     }
 
     private string TruncateLogMessage(string message)
@@ -414,10 +458,11 @@ public class TaskTracker
     }
 
     /// <summary>
-    /// Collect initial user inputs (Project Endpoint, Model Deployment Name, Tenant Id optional)
+    /// Collect initial user inputs (Project Endpoint, Model Deployment Name, Tenant Id, SQL Server Connection String)
     /// directly inside the live display bottom input cell.
+    /// Only prompts for values that are not already provided in user secrets.
     /// </summary>
-    public (string projectEndpoint, string modelDeploymentName, string tenantId) CollectInitialInputs(string defaultProjectEndpoint, string defaultModelDeploymentName, string defaultTenantId)
+    public (string projectEndpoint, string modelDeploymentName, string tenantId, string sqlServerConnectionString) CollectInitialInputs(string defaultProjectEndpoint, string defaultModelDeploymentName, string defaultTenantId, string defaultSqlServerConnectionString = "")
     {
         // Ensure live display started
         if (_liveContext == null)
@@ -428,20 +473,38 @@ public class TaskTracker
         string project = defaultProjectEndpoint;
         string model = defaultModelDeploymentName;
         string tenant = defaultTenantId;
+        string sqlServer = defaultSqlServerConnectionString;
 
-        // Sequential prompt definitions
-        var prompts = new List<(string key, string label, bool required, string current)>
+        // Sequential prompt definitions - only ask for values not already in user secrets
+        var prompts = new List<(string key, string label, bool required, string current)>();
+        
+        // Add prompts only for values not already set
+        if (string.IsNullOrWhiteSpace(defaultProjectEndpoint))
         {
-            ("project", "Enter Project Endpoint", true, project),
-            ("model", "Enter Model Deployment Name", true, model),
-            ("tenant", "Enter Tenant ID (optional, press ESC to skip)", false, tenant)
-        };
+            prompts.Add(("project", "Enter Project Endpoint", true, project));
+        }
+        
+        if (string.IsNullOrWhiteSpace(defaultModelDeploymentName))
+        {
+            prompts.Add(("model", "Enter Model Deployment Name", true, model));
+        }
+        
+        if (string.IsNullOrWhiteSpace(defaultTenantId))
+        {
+            prompts.Add(("tenant", "Enter Tenant ID (optional, press ESC to skip)", false, tenant));
+        }
+        
+        if (string.IsNullOrWhiteSpace(defaultSqlServerConnectionString))
+        {
+            prompts.Add(("sqlserver", "Enter SQL Server Connection String (optional, press ESC to skip)", false, sqlServer));
+        }
 
         foreach (var p in prompts.ToList())
         {
             string buffer = p.current ?? string.Empty;
             bool done = false;
             bool showError = false;
+
             SetInteraction($"{p.label}: {buffer}");
             UpdateDisplay();
 
@@ -460,8 +523,8 @@ public class TaskTracker
                         }
                         else
                         {
-                            // For tenant (optional), Enter should confirm only if a value was provided.
-                            if (p.key == "tenant" && string.IsNullOrWhiteSpace(buffer))
+                            // For optional fields, Enter should confirm only if a value was provided.
+                            if (!p.required && string.IsNullOrWhiteSpace(buffer))
                             {
                                 // Do not skip on Enter; require ESC to skip.
                                 showError = false; // no error, just continue waiting for input or ESC
@@ -481,8 +544,8 @@ public class TaskTracker
                     }
                     else if (key.Key == ConsoleKey.Escape)
                     {
-                        // ESC will skip the Tenant ID by clearing and completing.
-                        if (p.key == "tenant")
+                        // ESC will skip optional fields by clearing and completing.
+                        if (!p.required)
                         {
                             buffer = string.Empty;
                             done = true;
@@ -497,7 +560,7 @@ public class TaskTracker
                         buffer += key.KeyChar;
                     }
 
-                    // Update interaction cell
+                    // Update interaction cell - display full text without masking
                     if (showError && !string.IsNullOrWhiteSpace(buffer))
                     {
                         showError = false; // clear error state when user starts typing again
@@ -514,14 +577,37 @@ public class TaskTracker
                 case "project": project = buffer; break;
                 case "model": model = buffer; break;
                 case "tenant": tenant = buffer; break;
+                case "sqlserver": sqlServer = buffer; break;
             }
 
             AddLog($"[green]✓[/] {p.label} set");
         }
 
+        // Log accepted values from user secrets
+        if (!string.IsNullOrWhiteSpace(defaultProjectEndpoint))
+        {
+            AddLog($"[green]✓[/] Project Endpoint accepted from user secrets");
+        }
+        
+        if (!string.IsNullOrWhiteSpace(defaultModelDeploymentName))
+        {
+            AddLog($"[green]✓[/] Model Deployment Name accepted from user secrets");
+        }
+        
+        if (!string.IsNullOrWhiteSpace(defaultTenantId))
+        {
+            AddLog($"[green]✓[/] Tenant ID accepted from user secrets");
+        }
+        
+        if (!string.IsNullOrWhiteSpace(defaultSqlServerConnectionString))
+        {
+            AddLog($"[green]✓[/] SQL Server Connection String accepted from user secrets");
+        }
+
         ClearInteraction();
         UpdateConfiguration(project, model, tenant);
-        return (project, model, tenant);
+        _sqlServerConnectionString = sqlServer;
+        return (project, model, tenant, sqlServer);
     }
 
     /// <summary>

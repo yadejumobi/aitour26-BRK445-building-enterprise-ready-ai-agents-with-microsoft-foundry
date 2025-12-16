@@ -1,6 +1,7 @@
 #pragma warning disable CS8604
 
-using Azure.Provisioning.CognitiveServices;
+using Aspire.Hosting.Azure;
+using System;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
@@ -24,6 +25,9 @@ var embeddingsDeploymentName = "text-embedding-3-small";
 // Microsoft Foundry project connection - used for agent services
 IResourceBuilder<IResourceWithConnectionString>? microsoftfoundryproject;
 
+IResourceBuilder<AzureAIFoundryDeploymentResource> gpt5mini = null;
+IResourceBuilder<AzureAIFoundryDeploymentResource> embeddingsDeployment = null;
+
 // Application Insights for telemetry
 IResourceBuilder<IResourceWithConnectionString>? appInsights;
 
@@ -32,9 +36,10 @@ IResourceBuilder<IResourceWithConnectionString>? appInsights;
 // ============================================================================
 
 // Products service with database dependency
-var products = builder.AddProject<Projects.Products>("products")
+var dataservice = builder.AddProject<Projects.DataService>("dataservice")
     .WithReference(productsDb)
-    .WaitFor(productsDb);
+    .WaitFor(productsDb)
+    .WithExternalHttpEndpoints();
 
 // ============================================================================
 // SECTION 3: AGENT MICROSERVICES
@@ -42,27 +47,35 @@ var products = builder.AddProject<Projects.Products>("products")
 
 // Individual agent services - each handles a specific agent functionality
 var analyzePhotoService = builder.AddProject<Projects.AnalyzePhotoService>("analyzephotoservice")
+    .WaitFor(dataservice).WithReference(dataservice)
     .WithExternalHttpEndpoints();
 
 var customerInformationService = builder.AddProject<Projects.CustomerInformationService>("customerinformationservice")
+    .WaitFor(dataservice).WithReference(dataservice)
     .WithExternalHttpEndpoints();
 
 var toolReasoningService = builder.AddProject<Projects.ToolReasoningService>("toolreasoningservice")
+    .WaitFor(dataservice).WithReference(dataservice)
     .WithExternalHttpEndpoints();
 
 var inventoryService = builder.AddProject<Projects.InventoryService>("inventoryservice")
+    .WaitFor(dataservice).WithReference(dataservice)
     .WithExternalHttpEndpoints();
 
 var matchmakingService = builder.AddProject<Projects.MatchmakingService>("matchmakingservice")
+    .WaitFor(dataservice).WithReference(dataservice)
     .WithExternalHttpEndpoints();
 
 var locationService = builder.AddProject<Projects.LocationService>("locationservice")
+    .WaitFor(dataservice).WithReference(dataservice)
     .WithExternalHttpEndpoints();
 
 var navigationService = builder.AddProject<Projects.NavigationService>("navigationservice")
+    .WaitFor(dataservice).WithReference(dataservice)
     .WithExternalHttpEndpoints();
 
 var productSearchService = builder.AddProject<Projects.ProductSearchService>("productsearchservice")
+    .WaitFor(dataservice).WithReference(dataservice)
     .WithExternalHttpEndpoints();
 
 // ============================================================================
@@ -71,40 +84,33 @@ var productSearchService = builder.AddProject<Projects.ProductSearchService>("pr
 
 // Single Agent Demo - demonstrates single agent scenarios
 var singleAgentDemo = builder.AddProject<Projects.SingleAgentDemo>("singleagentdemo")
-    .WithReference(analyzePhotoService)
-    .WithReference(customerInformationService)
-    .WithReference(toolReasoningService)
-    .WithReference(inventoryService)
-    .WithReference(productSearchService)
-    .WithExternalHttpEndpoints();
-
-// Multi Agent Demo - demonstrates multi-agent orchestration
-var multiAgentDemo = builder.AddProject<Projects.MultiAgentDemo>("multiagentdemo")
-    .WithReference(analyzePhotoService)
-    .WithReference(customerInformationService)
-    .WithReference(toolReasoningService)
-    .WithReference(inventoryService)
-    .WithReference(productSearchService)
-    .WithReference(matchmakingService)
-    .WithReference(locationService)
-    .WithReference(navigationService)
-    .WithExternalHttpEndpoints();
-
-// ============================================================================
-// SECTION 5: CATALOG AND STORE SERVICES
-// ============================================================================
-
-// Agents Catalog Service - provides agent listing and management
-var agentscatalogservice = builder.AddProject<Projects.AgentsCatalogService>("agentscatalogservice")
+    .WaitFor(dataservice).WithReference(dataservice)
     .WaitFor(analyzePhotoService).WithReference(analyzePhotoService)
     .WaitFor(customerInformationService).WithReference(customerInformationService)
     .WaitFor(toolReasoningService).WithReference(toolReasoningService)
     .WaitFor(inventoryService).WithReference(inventoryService)
+    .WaitFor(productSearchService).WithReference(productSearchService)
     .WaitFor(matchmakingService).WithReference(matchmakingService)
     .WaitFor(locationService).WithReference(locationService)
     .WaitFor(navigationService).WithReference(navigationService)
-    .WaitFor(productSearchService).WithReference(productSearchService)
     .WithExternalHttpEndpoints();
+
+// Multi Agent Demo - demonstrates multi-agent orchestration
+var multiAgentDemo = builder.AddProject<Projects.MultiAgentDemo>("multiagentdemo")
+    .WaitFor(dataservice).WithReference(dataservice)
+    .WaitFor(analyzePhotoService).WithReference(analyzePhotoService)
+    .WaitFor(customerInformationService).WithReference(customerInformationService)
+    .WaitFor(toolReasoningService).WithReference(toolReasoningService)
+    .WaitFor(inventoryService).WithReference(inventoryService)
+    .WaitFor(productSearchService).WithReference(productSearchService)
+    .WaitFor(matchmakingService).WithReference(matchmakingService)
+    .WaitFor(locationService).WithReference(locationService)
+    .WaitFor(navigationService).WithReference(navigationService)
+    .WithExternalHttpEndpoints();
+
+// ============================================================================
+// SECTION 5: STORE SERVICES
+// ============================================================================
 
 // Store - main frontend application
 var store = builder.AddProject<Projects.Store>("store")
@@ -116,10 +122,9 @@ var store = builder.AddProject<Projects.Store>("store")
     .WaitFor(locationService).WithReference(locationService)
     .WaitFor(navigationService).WithReference(navigationService)
     .WaitFor(productSearchService).WithReference(productSearchService)
-    .WaitFor(products).WithReference(products)
+    .WaitFor(dataservice).WithReference(dataservice)
     .WaitFor(singleAgentDemo).WithReference(singleAgentDemo)
     .WaitFor(multiAgentDemo).WithReference(multiAgentDemo)
-    .WaitFor(agentscatalogservice).WithReference(agentscatalogservice)
     .WithExternalHttpEndpoints();
 
 // ============================================================================
@@ -130,27 +135,25 @@ if (builder.ExecutionContext.IsPublishMode)
 {
     // PRODUCTION: Use Azure-provisioned services
     appInsights = builder.AddAzureApplicationInsights("appInsights");
-    var aoai = builder.AddAzureOpenAI("microsoftfoundry");
 
-    // Configure chat model deployment
-    var gpt5mini = aoai.AddDeployment(name: chatDeploymentName,
-            modelName: "gpt-5-mini",
-            modelVersion: "2025-08-07");
+    var aiFoundry = builder.AddAzureAIFoundry("foundry");
+    gpt5mini = aiFoundry.AddDeployment(
+        name: chatDeploymentName,
+        modelName: "gpt-5-mini",
+        modelVersion: "2025-08-07",
+        format: "Microsoft");
     gpt5mini.Resource.SkuName = "GlobalStandard";
 
-    // Configure embeddings model deployment
-    var embeddingsDeployment = aoai.AddDeployment(name: embeddingsDeploymentName,
+    embeddingsDeployment = aiFoundry.AddDeployment(
+        name: embeddingsDeploymentName,
         modelName: "text-embedding-3-small",
-        modelVersion: "1");
+        modelVersion: "1",
+        format: "Microsoft");
     embeddingsDeployment.Resource.SkuName = "GlobalStandard";
-
-
-    microsoftfoundrycnnstring = aoai;
 }
 else
 {
     // DEVELOPMENT: Use connection strings from configuration
-    microsoftfoundrycnnstring = builder.AddConnectionString("microsoftfoundrycnnstring");
     appInsights = builder.AddConnectionString("appinsights", "APPLICATIONINSIGHTS_CONNECTION_STRING");
 }
 
@@ -159,20 +162,18 @@ else
 // ============================================================================
 
 // Add Application Insights to all services
-products.WithReference(appInsights).WithExternalHttpEndpoints();
-store.WithReference(appInsights).WithExternalHttpEndpoints();
-analyzePhotoService.WithReference(appInsights).WithExternalHttpEndpoints();
-customerInformationService.WithReference(appInsights).WithExternalHttpEndpoints();
-toolReasoningService.WithReference(appInsights).WithExternalHttpEndpoints();
-inventoryService.WithReference(appInsights).WithExternalHttpEndpoints();
-matchmakingService.WithReference(appInsights).WithExternalHttpEndpoints();
-locationService.WithReference(appInsights).WithExternalHttpEndpoints();
-navigationService.WithReference(appInsights).WithExternalHttpEndpoints();
-productSearchService.WithReference(appInsights).WithExternalHttpEndpoints();
-singleAgentDemo.WithReference(appInsights).WithExternalHttpEndpoints();
-multiAgentDemo.WithReference(appInsights).WithExternalHttpEndpoints();
-agentscatalogservice.WithReference(appInsights).WithExternalHttpEndpoints();
-
+dataservice.WithReference(appInsights);
+analyzePhotoService.WithReference(appInsights);
+customerInformationService.WithReference(appInsights);
+toolReasoningService.WithReference(appInsights);
+inventoryService.WithReference(appInsights);
+matchmakingService.WithReference(appInsights);
+locationService.WithReference(appInsights);
+navigationService.WithReference(appInsights);
+productSearchService.WithReference(appInsights);
+singleAgentDemo.WithReference(appInsights);
+multiAgentDemo.WithReference(appInsights);
+store.WithReference(appInsights);
 
 // ============================================================================
 // SECTION 8: MICROSOFT FOUNDRY CONFIGURATION
@@ -180,9 +181,10 @@ agentscatalogservice.WithReference(appInsights).WithExternalHttpEndpoints();
 
 // Configure Microsoft Foundry project connection for all agent services
 microsoftfoundryproject = builder.AddConnectionString("microsoftfoundryproject");
+microsoftfoundrycnnstring = builder.AddConnectionString("microsoftfoundrycnnstring");
 
 // Add AI configuration to Products service
-products
+dataservice
     .WithReference(microsoftfoundrycnnstring)
     .WithEnvironment("AI_ChatDeploymentName", chatDeploymentName)
     .WithEnvironment("AI_embeddingsDeploymentName", embeddingsDeploymentName);
@@ -234,11 +236,6 @@ singleAgentDemo
     .WithEnvironment("AI_ChatDeploymentName", chatDeploymentName);
 
 multiAgentDemo
-    .WithReference(microsoftfoundryproject)
-    .WithReference(microsoftfoundrycnnstring)
-    .WithEnvironment("AI_ChatDeploymentName", chatDeploymentName);
-
-agentscatalogservice
     .WithReference(microsoftfoundryproject)
     .WithReference(microsoftfoundrycnnstring)
     .WithEnvironment("AI_ChatDeploymentName", chatDeploymentName);

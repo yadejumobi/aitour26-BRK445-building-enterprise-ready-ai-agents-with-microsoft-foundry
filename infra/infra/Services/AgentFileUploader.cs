@@ -67,7 +67,8 @@ internal sealed class AgentFileUploader : IAgentFileUploader
                 attempted++;
                 if (!File.Exists(path))
                 {
-                    _taskTracker.AddLog($"[yellow]⚠[/] File missing, skipped: [grey]{path}[/]");
+                    var safePath = Markup.Escape(path);
+                    _taskTracker.AddLog($"[yellow]⚠[/] File missing, skipped: [grey]{safePath}[/]");
                     continue;
                 }
                 if (uploaded.ContainsKey(path))
@@ -78,18 +79,19 @@ internal sealed class AgentFileUploader : IAgentFileUploader
                 try
                 {
                     var info = new FileInfo(path);
-                    _taskTracker.AddLog($"[cyan]Uploading[/] {info.Name}");
+                    var safeFileName = Markup.Escape(info.Name);
+                    _taskTracker.AddLog($"[cyan]Uploading[/] {safeFileName}");
 
                     // Live status spinner while uploading
                     var cts = new System.Threading.CancellationTokenSource();
-                    var spinnerFrames = new[] { "|", "/", "-", "\\" };
+                    var spinnerFrames = new[] { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }; // Unicode spinner dots
                     var spinnerTask = System.Threading.Tasks.Task.Run(() =>
                     {
                         int i = 0;
                         while (!cts.IsCancellationRequested)
                         {
                             var frame = spinnerFrames[i++ % spinnerFrames.Length];
-                            _taskTracker.SetInteraction($"Uploading {info.Name} {frame}");
+                            _taskTracker.SetInteraction($"Uploading {safeFileName} {frame}");
                             System.Threading.Thread.Sleep(80);
                         }
                     });
@@ -98,7 +100,8 @@ internal sealed class AgentFileUploader : IAgentFileUploader
                         filePath: path,
                         purpose: FileUploadPurpose.Assistants);
                     uploaded[path] = new UploadedFile(uploadResult.Value.Id, uploadResult.Value.Filename, path);
-                    _taskTracker.AddLog($"[green]✓[/] Uploaded: [grey]{uploadResult.Value.Filename}[/] (Id: {uploadResult.Value.Id})");
+                    var safeUploadedFileName = Markup.Escape(uploadResult.Value.Filename);
+                    _taskTracker.AddLog($"[green]✓[/] Uploaded: [grey]{safeUploadedFileName}[/] (Id: {uploadResult.Value.Id})");
                     _taskTracker.IncrementProgress();
 
                     // Stop spinner and clear interaction
@@ -108,7 +111,9 @@ internal sealed class AgentFileUploader : IAgentFileUploader
                 }
                 catch (Exception exUp)
                 {
-                    _taskTracker.AddLog($"[red]✗[/] Upload failed for [grey]{path}[/]: {exUp.Message}");
+                    var safePath = Markup.Escape(path);
+                    var safeMessage = Markup.Escape(exUp.Message);
+                    _taskTracker.AddLog($"[red]✗[/] Upload failed for [grey]{safePath}[/]: {safeMessage}");
                     _taskTracker.ClearInteraction();
                 }
             }

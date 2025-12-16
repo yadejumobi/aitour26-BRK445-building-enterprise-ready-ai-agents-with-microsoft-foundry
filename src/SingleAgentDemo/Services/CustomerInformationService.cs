@@ -1,4 +1,5 @@
 using SharedEntities;
+using ZavaAgentsMetadata;
 
 namespace SingleAgentDemo.Services;
 
@@ -6,7 +7,7 @@ public class CustomerInformationService
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<CustomerInformationService> _logger;
-    private string _framework = "sk"; // Default to Semantic Kernel
+    private string _framework = AgentMetadata.FrameworkIdentifiers.MafLocal; // Default to MAF Local
 
     public CustomerInformationService(HttpClient httpClient, ILogger<CustomerInformationService> logger)
     {
@@ -17,10 +18,10 @@ public class CustomerInformationService
     /// <summary>
     /// Sets the agent framework to use for service calls
     /// </summary>
-    /// <param name="framework">"llm" for LLM Direct Call, "sk" for Semantic Kernel, or "maf" for Microsoft Agent Framework</param>
+    /// <param name="framework">"llm" for LLM Direct Call, or "maf" for Microsoft Agent Framework</param>
     public void SetFramework(string framework)
     {
-        _framework = framework?.ToLowerInvariant() ?? "sk";
+        _framework = framework?.ToLowerInvariant() ?? AgentMetadata.FrameworkIdentifiers.MafLocal;
         _logger.LogInformation($"[CustomerInformationService] Framework set to: {_framework}");
     }
 

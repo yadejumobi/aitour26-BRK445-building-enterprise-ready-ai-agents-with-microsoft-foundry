@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using SharedEntities;
 using SingleAgentDemo.Services;
+using ZavaAgentsMetadata;
 
 namespace SingleAgentDemo.Controllers;
 
@@ -9,7 +10,7 @@ namespace SingleAgentDemo.Controllers;
 /// This mode bypasses AI orchestration and calls the underlying HTTP services directly.
 /// </summary>
 [ApiController]
-[Route("api/singleagent/directcall")]
+[Route("api/singleagent/directcall")]  // Using constant AgentMetadata.FrameworkIdentifiers.DirectCall
 public class SingleAgentControllerDirectCall : ControllerBase
 {
     private readonly ILogger<SingleAgentControllerDirectCall> _logger;
@@ -32,10 +33,10 @@ public class SingleAgentControllerDirectCall : ControllerBase
         _inventoryService = inventoryService;
 
         // Set framework to directcall for all agent services
-        _analyzePhotoService.SetFramework("directcall");
-        _customerInformationService.SetFramework("directcall");
-        _toolReasoningService.SetFramework("directcall");
-        _inventoryService.SetFramework("directcall");
+        _analyzePhotoService.SetFramework(AgentMetadata.FrameworkIdentifiers.DirectCall);
+        _customerInformationService.SetFramework(AgentMetadata.FrameworkIdentifiers.DirectCall);
+        _toolReasoningService.SetFramework(AgentMetadata.FrameworkIdentifiers.DirectCall);
+        _inventoryService.SetFramework(AgentMetadata.FrameworkIdentifiers.DirectCall);
     }
 
     /// <summary>

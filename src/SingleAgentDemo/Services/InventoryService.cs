@@ -1,4 +1,5 @@
 using SharedEntities;
+using ZavaAgentsMetadata;
 
 namespace SingleAgentDemo.Services;
 
@@ -6,7 +7,7 @@ public class InventoryService
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<InventoryService> _logger;
-    private string _framework = "sk"; // Default to Semantic Kernel
+    private string _framework = AgentMetadata.FrameworkIdentifiers.MafLocal; // Default to MAF Local
 
     public InventoryService(HttpClient httpClient, ILogger<InventoryService> logger)
     {

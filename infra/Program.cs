@@ -12,13 +12,16 @@ var config = new ConfigurationBuilder().AddUserSecrets<Program>().Build();
 var secretProjectEndpoint = config["ProjectEndpoint"] ?? "";
 var secretModelDeploymentName = config["ModelDeploymentName"] ?? "";
 var secretTenantId = config["TenantId"] ?? "";
+var secretSqlServerConnectionString = config["SqlServerConnectionString"] ?? "";
 
 // Start live display immediately with defaults (may be empty) and collect inputs inside the box
 var taskTracker = new TaskTracker(secretProjectEndpoint, secretModelDeploymentName);
-var liveDisplayTask = System.Threading.Tasks.Task.Run(() => taskTracker.StartLiveDisplay());
+var liveDisplayTask = Task.Run(() => taskTracker.StartLiveDisplay());
+
 // Allow live context to initialize
-System.Threading.Thread.Sleep(200);
-var (projectEndpoint, modelDeploymentName, tenantId) = taskTracker.CollectInitialInputs(secretProjectEndpoint, secretModelDeploymentName, secretTenantId);
+Thread.Sleep(200);
+
+var (projectEndpoint, modelDeploymentName, tenantId, sqlServerConnectionString) = taskTracker.CollectInitialInputs(secretProjectEndpoint, secretModelDeploymentName, secretTenantId, secretSqlServerConnectionString);
 
 // slight pause to show logs of input completion
 System.Threading.Thread.Sleep(200);
@@ -44,6 +47,14 @@ try
 
     taskTracker.CompleteTask("Set Environment Values");
     taskTracker.IncrementProgress(); // Count environment setup as 1 step
+
+    // Ask user if they want to initialize the database
+    bool initializeDb = taskTracker.PromptYesNo("Do you want to initialize the Azure SQL Database?", defaultValue: false);
+
+    if (initializeDb)
+    {
+        await DbInitializationHelper.InitializeDatabaseAsync(taskTracker);
+    }
 
     // Path to JSON configuration file containing agent metadata and optional knowledge files
     string agentConfigPath = Path.Combine(AppContext.BaseDirectory, "agents.json");

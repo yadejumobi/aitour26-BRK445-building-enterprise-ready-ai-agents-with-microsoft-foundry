@@ -1,10 +1,10 @@
 using Microsoft.Agents.AI;
+using ZavaAgentsMetadata;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.AI;
 using SharedEntities;
 using System.Text;
-using ZavaFoundryAgentsProvider;
 
 namespace MultiAgentDemo.Controllers;
 
@@ -13,7 +13,7 @@ namespace MultiAgentDemo.Controllers;
 /// Supports multiple orchestration patterns: Sequential, Concurrent, Handoff, GroupChat, and Magentic.
 /// </summary>
 [ApiController]
-[Route("api/multiagent/maf_foundry")]
+[Route("api/multiagent/maf_foundry")]  // Using constant AgentMetadata.FrameworkIdentifiers.MafFoundry
 public class MultiAgentControllerMAFFoundry : ControllerBase
 {
     private readonly ILogger<MultiAgentControllerMAFFoundry> _logger;
@@ -293,13 +293,13 @@ public class MultiAgentControllerMAFFoundry : ControllerBase
     {
         return (
             ProductSearch: _serviceProvider.GetRequiredKeyedService<AIAgent>(
-                AgentNamesProvider.GetAgentName(AgentNamesProvider.AgentName.ProductSearchAgent)),
+                AgentMetadata.GetAgentName(AgentType.ProductSearchAgent)),
             ProductMatchmaking: _serviceProvider.GetRequiredKeyedService<AIAgent>(
-                AgentNamesProvider.GetAgentName(AgentNamesProvider.AgentName.ProductMatchmakingAgent)),
+                AgentMetadata.GetAgentName(AgentType.ProductMatchmakingAgent)),
             LocationService: _serviceProvider.GetRequiredKeyedService<AIAgent>(
-                AgentNamesProvider.GetAgentName(AgentNamesProvider.AgentName.LocationServiceAgent)),
+                AgentMetadata.GetAgentName(AgentType.LocationServiceAgent)),
             Navigation: _serviceProvider.GetRequiredKeyedService<AIAgent>(
-                AgentNamesProvider.GetAgentName(AgentNamesProvider.AgentName.NavigationAgent))
+                AgentMetadata.GetAgentName(AgentType.NavigationAgent))
         );
     }
 
