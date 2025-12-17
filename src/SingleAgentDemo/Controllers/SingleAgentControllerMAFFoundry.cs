@@ -57,9 +57,9 @@ public class SingleAgentControllerMAFFoundry : ControllerBase
             AIFunctionFactory.Create(PerformInventoryCheck)
         ];
 
-        var agentName = "ZavaSingleAgent2";
+        var agentName = AgentMetadata.GetAgentName(AgentType.ZavaSingleAgent);
         var chatDeploymentName = config["AI_ChatDeploymentName"] ?? "gpt-5-mini";
-        var instructions = ZavaAgentsMetadata.AgentMetadata.GetAgentInstructions(ZavaAgentsMetadata.AgentType.ZavaSingleAgent);
+        var instructions = AgentMetadata.GetAgentInstructions(AgentType.ZavaSingleAgent);
 
         // Get the agent from Microsoft Foundry
         _orchestratorAgent = foundryAgentProvider.GetOrCreateAIAgent(
