@@ -5,10 +5,10 @@
   </Folder>
   <Folder Name="/2 Models/">
     <Project Path="CartEntities/CartEntities.csproj" />
+    <Project Path="DataServiceClient/DataServiceClient.csproj" />
     <Project Path="SearchEntities/SearchEntities.csproj" />
     <Project Path="SharedEntities/SharedEntities.csproj" />
     <Project Path="VectorEntities/VectorEntities.csproj" />
-    <Project Path="DataServiceClient/DataServiceClient.csproj" />
   </Folder>
   <Folder Name="/3 Store/">
     <Project Path="Store/Store.csproj" />
@@ -20,15 +20,16 @@
   <Folder Name="/5 Business Services/">
     <Project Path="AnalyzePhotoService/AnalyzePhotoService.csproj" />
     <Project Path="CustomerInformationService/CustomerInformationService.csproj" />
+    <Project Path="DataService/DataService.csproj" />
     <Project Path="InventoryService/InventoryService.csproj" />
     <Project Path="LocationService/LocationService.csproj" />
     <Project Path="MatchmakingService/MatchmakingService.csproj" />
     <Project Path="NavigationService/NavigationService.csproj" />
-    <Project Path="DataService/DataService.csproj" />
     <Project Path="ProductSearchService/ProductSearchService.csproj" Id="ddec019a-fde1-4ac3-862b-dffa4d38efbe" />
     <Project Path="ToolReasoningService/ToolReasoningService.csproj" />
   </Folder>
   <Folder Name="/6 MAF/">
+    <Project Path="ZavaMAFAIFoundry/ZavaMAFAIFoundry.csproj" Id="bb402c65-425c-4f7a-8479-bce52030f654" />
     <Project Path="ZavaMAFFoundry/ZavaMAFFoundry.csproj" Id="cedf7ed7-47e5-4733-a184-fe36eeb23aeb" />
     <Project Path="ZavaMAFLocal/ZavaMAFLocal.csproj" />
   </Folder>
