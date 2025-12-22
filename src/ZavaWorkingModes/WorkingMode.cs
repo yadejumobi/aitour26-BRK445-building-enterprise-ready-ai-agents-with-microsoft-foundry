@@ -21,6 +21,11 @@ public enum WorkingMode
     MafFoundry,
 
     /// <summary>
+    /// Microsoft Agent Framework using Agents hosted in Microsoft AI Foundry.
+    /// </summary>
+    MafAIFoundry,
+
+    /// <summary>
     /// Microsoft Agent Framework using locally created agents with gpt-5-mini model.
     /// </summary>
     MafLocal
@@ -39,6 +44,7 @@ public static class WorkingModeProvider
         WorkingMode.DirectCall => "directcall",
         WorkingMode.Llm => "llm",
         WorkingMode.MafFoundry => "maf_foundry",
+        WorkingMode.MafAIFoundry => "maf_ai_foundry",
         WorkingMode.MafLocal => "maf_local",
         _ => throw new ArgumentOutOfRangeException(nameof(mode))
     };
@@ -51,6 +57,7 @@ public static class WorkingModeProvider
         WorkingMode.DirectCall => "Direct HTTP Call",
         WorkingMode.Llm => "LLM Direct Call",
         WorkingMode.MafFoundry => "MAF - Microsoft Foundry Agents",
+        WorkingMode.MafAIFoundry => "MAF - Microsoft AI Foundry Agents",
         WorkingMode.MafLocal => "MAF - Local Agents",
         _ => throw new ArgumentOutOfRangeException(nameof(mode))
     };
@@ -63,6 +70,7 @@ public static class WorkingModeProvider
         WorkingMode.DirectCall => "Direct HTTP calls to business services without AI orchestration. Uses hardcoded responses from the underlying HTTP services.",
         WorkingMode.Llm => "LLM Direct Call using Microsoft.Extensions.AI IChatClient. Direct interaction with language models for agent-like behavior.",
         WorkingMode.MafFoundry => "Microsoft Agent Framework using Agents deployed and hosted in Microsoft Foundry. Production-ready with cloud-managed agents.",
+        WorkingMode.MafAIFoundry => "Microsoft Agent Framework using Agents deployed and hosted in Microsoft AI Foundry. Production-ready with cloud-managed agents.",
         WorkingMode.MafLocal => "Microsoft Agent Framework using locally created agents with gpt-5-mini model. Agents are created with instructions and tools configured locally.",
         _ => throw new ArgumentOutOfRangeException(nameof(mode))
     };
@@ -92,6 +100,7 @@ public static class WorkingModeProvider
             "directcall" => WorkingMode.DirectCall,
             "llm" => WorkingMode.Llm,
             "maf_foundry" => WorkingMode.MafFoundry,
+            "maf_ai_foundry" => WorkingMode.MafAIFoundry,
             "maf" => WorkingMode.MafFoundry, // backward compatibility
             "maf_local" => WorkingMode.MafLocal,
             _ => DefaultMode
@@ -113,6 +122,7 @@ public static class WorkingModeProvider
             "directcall" => (WorkingMode?)WorkingMode.DirectCall,
             "llm" => WorkingMode.Llm,
             "maf_foundry" => WorkingMode.MafFoundry,
+            "maf_ai_foundry" => WorkingMode.MafAIFoundry,
             "maf" => WorkingMode.MafFoundry,
             "maf_local" => WorkingMode.MafLocal,
             _ => null
