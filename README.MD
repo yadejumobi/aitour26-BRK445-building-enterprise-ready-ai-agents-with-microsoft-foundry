@@ -66,7 +66,7 @@ After applying the fix, you can verify the mount service exists by running in a 
 
 ## Technologies used
 
--- C# / .NET 10 / .NET Aspire for orchestration
+- C# / .NET 10 / .NET Aspire for orchestration
 - Microsoft Foundry / Microsoft Foundry Agents
 - Docker
 
