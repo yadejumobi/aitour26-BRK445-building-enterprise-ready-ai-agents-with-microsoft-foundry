@@ -13,6 +13,7 @@
 	  <PackageReference Include="Microsoft.Agents.AI.Hosting" Version="1.0.0-preview.251204.1" />
 	  <PackageReference Include="Microsoft.Agents.AI.Hosting.OpenAI" Version="1.0.0-alpha.251204.1" />
 	  <PackageReference Include="Azure.Identity" Version="1.18.0-beta.2" />
+    <PackageReference Include="System.Memory.Data" Version="10.0.1" />
   </ItemGroup>
 
   <ItemGroup>

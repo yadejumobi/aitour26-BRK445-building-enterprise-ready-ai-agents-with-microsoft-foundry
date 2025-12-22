@@ -89,27 +89,34 @@ public static class MAFFoundryAgentExtensions
     /// <param name="projectEndpoint">The Microsoft Foundry project endpoint.</param>
     public static WebApplicationBuilder AddMAFFoundryAgents(
         this WebApplicationBuilder builder)
-        // , string projectEndpoint, string tenantId = "")
+    // , string projectEndpoint, string tenantId = "")
     {
 
         // Register MAF agent providers using new extension methods
         var projectEndpoint = builder.Configuration.GetConnectionString("microsoftfoundryproject");
         var tenantId = builder.Configuration.GetConnectionString("tenantId");
 
+        var logger = builder.Services.BuildServiceProvider().GetService<ILoggerFactory>()?.
+            CreateLogger("MAFFoundryAgentExtensions");
+
+        // If no Foundry project endpoint is configured, skip registration to allow local runs
+        if (string.IsNullOrWhiteSpace(projectEndpoint))
+        {
+            logger?.LogWarning("Microsoft Foundry project endpoint not configured; skipping Foundry agent registration.");
+            return builder;
+        }
+
         // Register the provider as singleton
         builder.Services.AddSingleton(_ =>
         new MAFFoundryAgentProvider(projectEndpoint, tenantId));
-
-        var logger = builder.Services.BuildServiceProvider().GetService<ILoggerFactory>()?.
-            CreateLogger("MAFFoundryAgentExtensions");
 
         logger?.LogInformation("Registering MAF Foundry agents from endpoint: {Endpoint}", projectEndpoint);
 
         var credentialOptions = new DefaultAzureCredentialOptions();
         if (!string.IsNullOrEmpty(tenantId))
-        { 
-            credentialOptions = new DefaultAzureCredentialOptions() 
-            { TenantId = tenantId }; 
+        {
+            credentialOptions = new DefaultAzureCredentialOptions()
+            { TenantId = tenantId };
         }
         var tokenCredential = new DefaultAzureCredential(options: credentialOptions);
 
