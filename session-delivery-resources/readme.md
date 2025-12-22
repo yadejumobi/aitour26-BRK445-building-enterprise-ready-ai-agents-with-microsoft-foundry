@@ -63,6 +63,6 @@ All demos reference the userguide files in the `session-delivery-resources/Demo/
 | Demo | Link | Type | Mode | Short description |
 |---:|---|---:|---|---|
 | 01 | [AI Foundry Agents](./Demo/01/01_demo_minimal.md) | Internal | Live (recorded fallback) | Agent/playground management; create/configure agents; demonstrate inventory agent returning structured JSON. |
-| 02 | [Aspire + Semantic Kernel](./Demo/02/02_demo_minimal.md) | Internal | Recorded (recommended) | Single-agent flow using Aspire + Semantic Kernel: semantic search and image analysis workflow. |
+| 02 | [Aspire — Single Agent](./Demo/02/02_demo_minimal.md) | Internal | Recorded (recommended) | Single-agent flow using Aspire orchestration: semantic search and image analysis workflow. |
 | 03 | [Multi-Agent Orchestration](./Demo/03/03_demo_minimal.md) | Internal | Live (recorded fallback) | Orchestration patterns (sequential, concurrent, handoff); triggers across inventory, matchmaking, location, navigation services. |
 | 04 | [Azure Monitor & AI Foundry Diagnostics](./Demo/04/04_demo_minimal.md) | Internal | Recorded | Use Azure Monitor and AI Foundry diagnostics to locate and investigate model/service issues. |

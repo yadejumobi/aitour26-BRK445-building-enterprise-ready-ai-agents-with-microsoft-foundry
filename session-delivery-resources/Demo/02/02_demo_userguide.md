@@ -1,8 +1,8 @@
 Video: [brk445-slide 14-demo.mp4](https://aka.ms/AAxrpqj) — 00:05:42
 
-# Aspire + Semantic Kernel — Single-Agent Demo Guide
+# Aspire — Single-Agent Demo Guide
 
-This guide documents the single-agent demo shown in the video. The demo showcases an Aspire orchestration built on .NET and Semantic Kernel, a storefront (Sava Labs), semantic search, an image-analysis workflow, and end-to-end observability with Aspire traces and Application Insights. Video length: 00:05:42.
+This guide documents the single-agent demo shown in the video. The demo showcases an Aspire orchestration built on .NET, a storefront (Sava Labs), semantic search, an image-analysis workflow, and end-to-end observability with Aspire traces and Application Insights. Video length: 00:05:42.
 
 ---
 
@@ -10,7 +10,7 @@ This guide documents the single-agent demo shown in the video. The demo showcase
 
 Demo highlights:
 
-- The solution runs on .NET using the Aspire orchestration and Semantic Kernel framework. [00:00:05 – 00:00:10]
+-- The solution runs on .NET using the Aspire orchestration. The demo can be executed using different working modes (see `src/ZavaWorkingModes/WorkingMode.cs`) such as direct HTTP calls, LLM direct call, or Microsoft Agent Framework (MAF) deployments. [00:00:05 – 00:00:10]
 - Aspire provides a single entry point that connects components and business service endpoints to agents hosted in Microsoft Foundry. [00:00:18 – 00:00:25]
 - The demo focuses on the single-agent flow (analysis, reasoning, inventory matching) and how traces reveal internal processing steps. [00:00:27 – 00:00:41]
 - The front-end store (Sava Labs) demonstrates semantic search, embedding generation and vector search for queries such as "paint my room." [00:01:25 – 00:01:52]
@@ -25,7 +25,7 @@ Demo highlights:
 
 Time: 00:00:05 – 00:00:25
 
-Goal: Understand the runtime architecture: Aspire orchestration with a single entry point and agent providers backed by Semantic Kernel.
+Goal: Understand the runtime architecture: Aspire orchestration with a single entry point and agent providers. The provider implementation and runtime behavior vary based on the selected working mode.
 
 Steps:
 

@@ -9,7 +9,7 @@ This guide documents the second scenario (multi-agent) in the demo. It explains 
 ## Overview
 
 Demo highlights:
-- Demonstrates a multi-agent architecture using Aspire and Semantic Kernel; multiple agents are connected to different services to provide distinct capabilities/tools. [00:00:03 – 00:00:19]
+- Demonstrates a multi-agent architecture using Aspire; multiple agents are connected to different services to provide distinct capabilities/tools. The orchestration and agent behavior depend on the selected working mode. [00:00:03 – 00:00:19]
 - Orchestration modes: default (coordinated), sequential, concurrent, handoff (router agent), and group chat (worker/reviewer). Choose the orchestration type based on the required coordination and output coherence. [00:01:02 – 00:01:37]
 - Example query: user asks "I can't find the product paint sprayer turbo price 750" — triggers inventory, matchmaking, location, and navigation agents; the orchestrator returns an orchestration ID and debug info for troubleshooting. [00:00:46 – 00:02:42]
 - Concurrent mode runs tasks in parallel but may produce incoherent outputs; handoff mode with a router agent sequences steps and composes coherent results. [00:01:22 – 00:04:00]
