@@ -32,12 +32,13 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.1" />
     <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="10.1.1" />
     <PackageReference Include="Microsoft.SemanticKernel.Connectors.InMemory" Version="1.68.0-preview" />
-    <PackageReference Include="Microsoft.VisualStudio.Web.CodeGeneration.Design" Version="10.0.0" />
+    <PackageReference Include="Microsoft.VisualStudio.Web.CodeGeneration.Design" Version="10.0.1" />
     <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.14.0" />
     <!--AI Search NuGet packages-->
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ZavaDatabaseInitialization\ZavaDatabaseInitialization.csproj" />
+    <ProjectReference Include="..\ZavaMAFFoundry\ZavaMAFFoundry.csproj" />
     <ProjectReference Include="..\ZavaServiceDefaults\ZavaServiceDefaults.csproj" />
     <ProjectReference Include="..\SearchEntities\SearchEntities.csproj" />
     <ProjectReference Include="..\VectorEntities\VectorEntities.csproj" />

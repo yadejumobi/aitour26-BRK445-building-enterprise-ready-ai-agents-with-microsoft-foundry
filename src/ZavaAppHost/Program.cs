@@ -12,19 +12,13 @@ var builder = DistributedApplication.CreateBuilder(args);
 // The database file will be stored in the DataService project directory
 var productsDb = builder.AddSqlite("productsDb");
 
-// Microsoft Foundry connection string (OpenAI) - used for chat and embeddings
-IResourceBuilder<IResourceWithConnectionString>? microsoftfoundrycnnstring;
+// Microsoft Foundry project connection - used for agent services
+IResourceBuilder<IResourceWithConnectionString>? microsoftfoundryproject;
 var chatDeploymentName = "gpt-5-mini";
 var embeddingsDeploymentName = "text-embedding-3-small";
 
-// Microsoft Foundry project connection - used for agent services
-IResourceBuilder<IResourceWithConnectionString>? microsoftfoundryproject;
-
 // TenantId - used for agent services
 IResourceBuilder<IResourceWithConnectionString>? tenantId;
-
-IResourceBuilder<AzureAIFoundryDeploymentResource> gpt5mini = null;
-IResourceBuilder<AzureAIFoundryDeploymentResource> embeddingsDeployment = null;
 
 // Application Insights for telemetry
 IResourceBuilder<IResourceWithConnectionString>? appInsights;
@@ -133,21 +127,6 @@ if (builder.ExecutionContext.IsPublishMode)
 {
     // PRODUCTION: Use Azure-provisioned services
     appInsights = builder.AddAzureApplicationInsights("appInsights");
-
-    var aiFoundry = builder.AddAzureAIFoundry("foundry");
-    gpt5mini = aiFoundry.AddDeployment(
-        name: chatDeploymentName,
-        modelName: "gpt-5-mini",
-        modelVersion: "2025-08-07",
-        format: "Microsoft");
-    gpt5mini.Resource.SkuName = "GlobalStandard";
-
-    embeddingsDeployment = aiFoundry.AddDeployment(
-        name: embeddingsDeploymentName,
-        modelName: "text-embedding-3-small",
-        modelVersion: "1",
-        format: "Microsoft");
-    embeddingsDeployment.Resource.SkuName = "GlobalStandard";
 }
 else
 {
@@ -179,77 +158,77 @@ store.WithReference(appInsights);
 
 // Configure Microsoft Foundry project connection for all agent services
 microsoftfoundryproject = builder.AddConnectionString("microsoftfoundryproject");
-microsoftfoundrycnnstring = builder.AddConnectionString("microsoftfoundrycnnstring");
 
 // Configure Azure Tenant Id for all agent services
 tenantId = builder.AddConnectionString("tenantId");
 
 // Add AI configuration to Products service
 dataservice
-    .WithReference(microsoftfoundrycnnstring)
+    .WithReference(microsoftfoundryproject)
+    .WithReference(tenantId)
     .WithEnvironment("AI_ChatDeploymentName", chatDeploymentName)
     .WithEnvironment("AI_embeddingsDeploymentName", embeddingsDeploymentName);
 
 // Add Microsoft Foundry configuration to all agent services
 analyzePhotoService
     .WithReference(microsoftfoundryproject)
-    .WithReference(microsoftfoundrycnnstring)
     .WithReference(tenantId)
-    .WithEnvironment("AI_ChatDeploymentName", chatDeploymentName);
+    .WithEnvironment("AI_ChatDeploymentName", chatDeploymentName)
+    .WithEnvironment("AI_embeddingsDeploymentName", embeddingsDeploymentName);
 
 customerInformationService
     .WithReference(microsoftfoundryproject)
-    .WithReference(microsoftfoundrycnnstring)
     .WithReference(tenantId)
-    .WithEnvironment("AI_ChatDeploymentName", chatDeploymentName);
+    .WithEnvironment("AI_ChatDeploymentName", chatDeploymentName)
+    .WithEnvironment("AI_embeddingsDeploymentName", embeddingsDeploymentName);
 
 toolReasoningService
     .WithReference(microsoftfoundryproject)
-    .WithReference(microsoftfoundrycnnstring)
     .WithReference(tenantId)
-    .WithEnvironment("AI_ChatDeploymentName", chatDeploymentName);
+    .WithEnvironment("AI_ChatDeploymentName", chatDeploymentName)
+    .WithEnvironment("AI_embeddingsDeploymentName", embeddingsDeploymentName);
 
 inventoryService
     .WithReference(microsoftfoundryproject)
-    .WithReference(microsoftfoundrycnnstring)
     .WithReference(tenantId)
-    .WithEnvironment("AI_ChatDeploymentName", chatDeploymentName);
+    .WithEnvironment("AI_ChatDeploymentName", chatDeploymentName)
+    .WithEnvironment("AI_embeddingsDeploymentName", embeddingsDeploymentName);
 
 matchmakingService
     .WithReference(microsoftfoundryproject)
-    .WithReference(microsoftfoundrycnnstring)
     .WithReference(tenantId)
-    .WithEnvironment("AI_ChatDeploymentName", chatDeploymentName);
+    .WithEnvironment("AI_ChatDeploymentName", chatDeploymentName)
+    .WithEnvironment("AI_embeddingsDeploymentName", embeddingsDeploymentName);
 
 locationService
     .WithReference(microsoftfoundryproject)
-    .WithReference(microsoftfoundrycnnstring)
     .WithReference(tenantId)
-    .WithEnvironment("AI_ChatDeploymentName", chatDeploymentName);
+    .WithEnvironment("AI_ChatDeploymentName", chatDeploymentName)
+    .WithEnvironment("AI_embeddingsDeploymentName", embeddingsDeploymentName);
 
 navigationService
     .WithReference(microsoftfoundryproject)
-    .WithReference(microsoftfoundrycnnstring)
     .WithReference(tenantId)
-    .WithEnvironment("AI_ChatDeploymentName", chatDeploymentName);
+    .WithEnvironment("AI_ChatDeploymentName", chatDeploymentName)
+    .WithEnvironment("AI_embeddingsDeploymentName", embeddingsDeploymentName);
 
 productSearchService
     .WithReference(microsoftfoundryproject)
-    .WithReference(microsoftfoundrycnnstring)
     .WithReference(tenantId)
-    .WithEnvironment("AI_ChatDeploymentName", chatDeploymentName);
+    .WithEnvironment("AI_ChatDeploymentName", chatDeploymentName)
+    .WithEnvironment("AI_embeddingsDeploymentName", embeddingsDeploymentName);
 
 singleAgentDemo
     .WithReference(microsoftfoundryproject)
-    .WithReference(microsoftfoundrycnnstring)
     .WithReference(tenantId)
-    .WithEnvironment("AI_ChatDeploymentName", chatDeploymentName);
+    .WithEnvironment("AI_ChatDeploymentName", chatDeploymentName)
+    .WithEnvironment("AI_embeddingsDeploymentName", embeddingsDeploymentName);
 
 multiAgentDemo
     .WithReference(microsoftfoundryproject)
-    .WithReference(microsoftfoundrycnnstring)
     .WithReference(tenantId)
-    .WithEnvironment("AI_ChatDeploymentName", chatDeploymentName);
+    .WithEnvironment("AI_ChatDeploymentName", chatDeploymentName)
+    .WithEnvironment("AI_embeddingsDeploymentName", embeddingsDeploymentName);
 
 // ============================================================================
 // RUN THE APPLICATION

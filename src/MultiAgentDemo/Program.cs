@@ -19,21 +19,7 @@ builder.Services.AddDataServiceClient("https+http://dataservice", builder.Enviro
 // Register MAF Foundry agents (Microsoft Foundry)
 builder.AddMAFFoundryAgents();
 
-// Register MAF agent providers using new extension methods
-var microsoftFoundryCnnString = builder.Configuration.GetConnectionString("microsoftfoundrycnnstring");
-var chatDeploymentName = builder.Configuration["AI_ChatDeploymentName"] ?? "gpt-5-mini";
-
-// Register MAF Local agents (locally created with IChatClient)
-// Register IChatClient for MAF Local agents
-builder.AddAzureOpenAIClient(connectionName: "microsoftfoundrycnnstring",
-    configureSettings: settings =>
-    {
-        if (string.IsNullOrEmpty(settings.Key))
-        {
-            settings.Credential = new Azure.Identity.DefaultAzureCredential();
-        }
-    }).AddChatClient(chatDeploymentName);
-
+// Register MAF Local agents (locally defined agents)
 builder.AddMAFLocalAgents();
 
 // add workflows

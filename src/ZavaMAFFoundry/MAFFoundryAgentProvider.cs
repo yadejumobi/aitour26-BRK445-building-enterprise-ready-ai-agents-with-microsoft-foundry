@@ -1,8 +1,12 @@
-﻿using Azure.AI.Projects;
+﻿#pragma warning disable CA2252, OPENAI001
+
+using Azure.AI.OpenAI;
+using Azure.AI.Projects;
 using Azure.Identity;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Hosting;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,15 +22,14 @@ namespace ZavaMAFFoundry;
 public class MAFFoundryAgentProvider
 {
     private readonly AIProjectClient _projectClient;
-    public MAFFoundryAgentProvider(string microsoftFoundryProjectEndpoint, string tenantId = "")
+    private readonly IConfiguration _configuration;
+    private readonly string _tenantId;
+    public MAFFoundryAgentProvider(string microsoftFoundryProjectEndpoint, IConfiguration configuration, string tenantId = "")
     {
-        var credentialOptions = new DefaultAzureCredentialOptions();
-        if (!string.IsNullOrEmpty(tenantId))
-        {
-            credentialOptions = new DefaultAzureCredentialOptions()
-            { TenantId = tenantId };
-        }
-        var tokenCredential = new DefaultAzureCredential(options: credentialOptions);
+        _configuration = configuration;
+        _tenantId = tenantId;
+
+        DefaultAzureCredential tokenCredential = GetAzureCredentials();
 
         _projectClient = new(
             endpoint: new Uri(microsoftFoundryProjectEndpoint),
@@ -72,6 +75,72 @@ public class MAFFoundryAgentProvider
 
         return agent;
     }
+
+    public IChatClient GetChatClient(string deploymentName = "")
+    {
+        if (string.IsNullOrEmpty(deploymentName))
+        {
+            deploymentName = _configuration["AI_ChatDeploymentName"] ?? "gpt-5-mini";
+        }
+
+        var azureOpenAIChatClient =  _projectClient.GetAzureOpenAIChatClient(deploymentName);
+
+        // get credentials        
+        DefaultAzureCredential tokenCredential = GetAzureCredentials();
+        var endpoint = new Uri(NormalizeEndpoint(azureOpenAIChatClient.Endpoint.AbsoluteUri));
+        var azureOpenAIClient = new AzureOpenAIClient(
+            endpoint: endpoint,
+            credential: tokenCredential);
+
+        return azureOpenAIClient
+            .GetChatClient(deploymentName)
+            .AsIChatClient();
+    }
+
+    public IEmbeddingGenerator<string, Embedding<float>> GetEmbeddingGenerator(string deploymentName = "")
+    {
+        if (string.IsNullOrEmpty(deploymentName))
+        {
+            deploymentName = _configuration["AI_embeddingsDeploymentName"] ?? "text-embedding-3-small";
+        }
+        var azureOpenAIEmbeddingClient = _projectClient.GetAzureOpenAIEmbeddingClient(deploymentName);
+
+        // get credentials        
+        DefaultAzureCredential tokenCredential = GetAzureCredentials();
+        var endpoint = new Uri(NormalizeEndpoint(azureOpenAIEmbeddingClient.Endpoint.AbsoluteUri));
+        var azureOpenAIClient = new AzureOpenAIClient(
+            endpoint: endpoint,
+            credential: tokenCredential);
+
+        return azureOpenAIClient
+            .GetEmbeddingClient(deploymentName)
+            .AsIEmbeddingGenerator();
+    }
+
+
+    private DefaultAzureCredential GetAzureCredentials()
+    {
+        var credentialOptions = new DefaultAzureCredentialOptions();
+        if (!string.IsNullOrEmpty(_tenantId))
+        {
+            credentialOptions = new DefaultAzureCredentialOptions()
+            { TenantId = _tenantId };
+        }
+        var tokenCredential = new DefaultAzureCredential(options: credentialOptions);
+        return tokenCredential;
+    }
+
+    internal static string NormalizeEndpoint(string endpoint)
+    {
+        // If the endpoint contains ".services.ai.azure.com/api/projects/", replace with ".cognitiveservices.azure.com"
+        if (endpoint.Contains(".services.ai.azure.com/api/projects/"))
+        {
+            var idx = endpoint.IndexOf(".services.ai.azure.com/api/projects/", StringComparison.OrdinalIgnoreCase);
+            var prefix = endpoint.Substring(0, idx);
+            return $"{prefix}.cognitiveservices.azure.com";
+        }
+        return endpoint;
+    }
 }
 
 /// <summary>
@@ -86,10 +155,8 @@ public static class MAFFoundryAgentExtensions
     /// Agents are retrieved from Microsoft Foundry by their agent IDs.
     /// </summary>
     /// <param name="builder">The web application builder.</param>
-    /// <param name="projectEndpoint">The Microsoft Foundry project endpoint.</param>
     public static WebApplicationBuilder AddMAFFoundryAgents(
         this WebApplicationBuilder builder)
-    // , string projectEndpoint, string tenantId = "")
     {
 
         // Register MAF agent providers using new extension methods
@@ -106,9 +173,17 @@ public static class MAFFoundryAgentExtensions
             return builder;
         }
 
-        // Register the provider as singleton
-        builder.Services.AddSingleton(_ =>
-        new MAFFoundryAgentProvider(projectEndpoint, tenantId));
+        // Register the MAFFoundryAgentProvider as singleton
+        MAFFoundryAgentProvider mafFoundryAgentProvider = new(projectEndpoint, builder.Configuration, tenantId);
+        builder.Services.AddSingleton(_ => mafFoundryAgentProvider);
+
+        // Register the IChatClient as is used in other scenarios
+        IChatClient chatClient = mafFoundryAgentProvider.GetChatClient();        
+        builder.Services.AddChatClient(chatClient);
+
+        // register the IEmbeddingGenerator as is used in other scenarios
+        IEmbeddingGenerator<string, Embedding<float>> embeddingGenerator = mafFoundryAgentProvider.GetEmbeddingGenerator();        
+        builder.Services.AddSingleton(embeddingGenerator);
 
         logger?.LogInformation("Registering MAF Foundry agents from endpoint: {Endpoint}", projectEndpoint);
 

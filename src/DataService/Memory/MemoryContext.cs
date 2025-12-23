@@ -1,35 +1,59 @@
-﻿using SharedEntities;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.VectorData;
 using Microsoft.SemanticKernel.Connectors.InMemory;
 using Newtonsoft.Json;
-using ZavaDatabaseInitialization;
+using OpenAI.Chat;
 using SearchEntities;
+using SharedEntities;
 using System.Text;
 using VectorEntities;
+using ZavaDatabaseInitialization;
+using ZavaMAFFoundry;
 
 namespace DataService.Memory;
 
 public class MemoryContext
 {
     private ILogger _logger;
-    public IChatClient? _chatClient;
-    public IEmbeddingGenerator<string, Embedding<float>>? _embeddingGenerator;
-    public VectorStoreCollection<int, ProductVector>? _productsCollection;
+    private IChatClient? _chatClient;
+    private IEmbeddingGenerator<string, Embedding<float>>? _embeddingGenerator;
+    private VectorStoreCollection<int, ProductVector>? _productsCollection;
     private string _systemPrompt = "";
     private bool _isMemoryCollectionInitialized = false;
 
-    public MemoryContext(ILogger logger, IChatClient? chatClient, IEmbeddingGenerator<string, Embedding<float>>? embeddingGenerator)
+    private OpenAI.Embeddings.EmbeddingClient _embeddingClient;
+
+    public MemoryContext(
+        ILogger logger,
+        IChatClient? chatClient,
+        IEmbeddingGenerator<string, Embedding<float>>? embeddingGenerator,
+        OpenAI.Embeddings.EmbeddingClient embeddingClient)
     {
         _logger = logger;
         _chatClient = chatClient;
         _embeddingGenerator = embeddingGenerator;
+        _embeddingClient = embeddingClient;
 
         _logger.LogInformation("Memory context created");
         _logger.LogInformation($"Chat Client is null: {_chatClient is null}");
         _logger.LogInformation($"Embedding Generator is null: {_embeddingGenerator is null}");
     }
+
+    //public MemoryContext(
+    //    ILogger logger,
+    //    MAFFoundryAgentProvider foundryAgentProvider)
+    //{
+    //    _logger = logger;
+
+    //    // get the chat client and embedding generator from the foundry agent provider
+    //    _chatClient = foundryAgentProvider.GetChatClient();
+    //    _embeddingGenerator = foundryAgentProvider.GetEmbeddingGenerator();
+
+    //    _logger.LogInformation("Memory context created");
+    //    _logger.LogInformation($"Chat Client is null: {_chatClient is null}");
+    //    _logger.LogInformation($"Embedding Generator is null: {_embeddingGenerator is null}");
+    //}
 
     public async Task<bool> InitMemoryContextAsync(Context db)
     {
@@ -65,8 +89,10 @@ public class MemoryContext
                     ImageUrl = product.ImageUrl
                 };
                 var result = await _embeddingGenerator.GenerateVectorAsync(productInfo);
-
                 productVector.Vector = result.ToArray();
+
+                //var result = await _embeddingClient.GenerateEmbeddingsAsync([productInfo]);
+                //productVector.Vector = result.Value[0].ToFloats();
                 await _productsCollection.UpsertAsync(productVector);
                 _logger.LogInformation("Product added to memory: {Product}", product.Name);
             }
@@ -128,7 +154,7 @@ Include products details.
     - Found Products: 
 {sbFoundProducts}";
 
-            var messages = new List<ChatMessage>
+            var messages = new List<Microsoft.Extensions.AI.ChatMessage>
             {
                 new(ChatRole.System, _systemPrompt),
                 new(ChatRole.System, prompt)
