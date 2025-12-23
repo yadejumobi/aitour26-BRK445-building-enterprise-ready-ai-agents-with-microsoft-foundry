@@ -106,6 +106,8 @@ var multiAgentDemo = builder.AddProject<Projects.MultiAgentDemo>("multiagentdemo
 
 // Store - main frontend application
 var store = builder.AddProject<Projects.Store>("store")
+    .WaitFor(dataservice).WithReference(dataservice)
+
     .WaitFor(analyzePhotoService).WithReference(analyzePhotoService)
     .WaitFor(customerInformationService).WithReference(customerInformationService)
     .WaitFor(toolReasoningService).WithReference(toolReasoningService)
@@ -114,7 +116,7 @@ var store = builder.AddProject<Projects.Store>("store")
     .WaitFor(locationService).WithReference(locationService)
     .WaitFor(navigationService).WithReference(navigationService)
     .WaitFor(productSearchService).WithReference(productSearchService)
-    .WaitFor(dataservice).WithReference(dataservice)
+    
     .WaitFor(singleAgentDemo).WithReference(singleAgentDemo)
     .WaitFor(multiAgentDemo).WithReference(multiAgentDemo)
     .WithExternalHttpEndpoints();
