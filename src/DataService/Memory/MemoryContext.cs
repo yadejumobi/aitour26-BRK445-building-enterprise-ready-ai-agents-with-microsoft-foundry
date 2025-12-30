@@ -22,18 +22,14 @@ public class MemoryContext
     private string _systemPrompt = "";
     private bool _isMemoryCollectionInitialized = false;
 
-    private OpenAI.Embeddings.EmbeddingClient _embeddingClient;
-
     public MemoryContext(
         ILogger logger,
         IChatClient? chatClient,
-        IEmbeddingGenerator<string, Embedding<float>>? embeddingGenerator,
-        OpenAI.Embeddings.EmbeddingClient embeddingClient)
+        IEmbeddingGenerator<string, Embedding<float>>? embeddingGenerator)
     {
         _logger = logger;
         _chatClient = chatClient;
         _embeddingGenerator = embeddingGenerator;
-        _embeddingClient = embeddingClient;
 
         _logger.LogInformation("Memory context created");
         _logger.LogInformation($"Chat Client is null: {_chatClient is null}");
