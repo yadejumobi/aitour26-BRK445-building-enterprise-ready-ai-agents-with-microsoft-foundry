@@ -4,6 +4,7 @@ using DataService.Endpoints;
 using DataService.Memory;
 using ZavaDatabaseInitialization;
 using Microsoft.EntityFrameworkCore;
+using ZavaMAFFoundry;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,39 +21,22 @@ builder.Services.AddDbContext<Context>(options =>
     options.UseSqlite(connectionString));
 
 
-var azureOpenAIConnectionName = "microsoftfoundrycnnstring";
-var chatDeploymentName = builder.Configuration["AI_ChatDeploymentName"] ?? "gpt-5-mini";
-var embeddingsDeploymentName = builder.Configuration["AI_embeddingsDeploymentName"] ?? "text-embedding-3-small";
-
-builder.AddAzureOpenAIClient(connectionName: azureOpenAIConnectionName,
-    configureSettings: settings =>
-    {
-        if (string.IsNullOrEmpty(settings.Key))
-        {
-            settings.Credential = new DefaultAzureCredential();
-        }
-    }).AddChatClient(chatDeploymentName);
-
-builder.AddAzureOpenAIClient(azureOpenAIConnectionName,
-    configureSettings: settings =>
-    {
-        if (string.IsNullOrEmpty(settings.Key))
-        {
-            settings.Credential = new DefaultAzureCredential();
-        }
-    }).AddEmbeddingGenerator(embeddingsDeploymentName);
-
 builder.Services.AddSingleton<IConfiguration>(sp =>
 {
     return builder.Configuration;
 });
+
+// Register MAF Microsoft Foundry Agents, chat client and embedding generator
+builder.AddMAFFoundryAgents();
 
 // add memory context
 builder.Services.AddSingleton(sp =>
 {
     var logger = sp.GetService<ILogger<Program>>();
     logger.LogInformation("Creating memory context");
-    return new MemoryContext(logger, sp.GetService<IChatClient>(), sp.GetService<IEmbeddingGenerator<string, Embedding<float>>>());
+    return new MemoryContext(logger, 
+        sp.GetService<IChatClient>(), 
+        sp.GetService<IEmbeddingGenerator<string, Embedding<float>>>());
 });
 
 // Add services to the container.
@@ -69,8 +53,6 @@ app.MapDataEndpoints();
 
 app.UseStaticFiles();
 
-// log Azure OpenAI resources
-app.Logger.LogInformation($"Azure OpenAI resources\n >> OpenAI Client Name: {azureOpenAIConnectionName}");
 AppContext.SetSwitch("OpenAI.Experimental.EnableOpenTelemetry", true);
 
 // manage db

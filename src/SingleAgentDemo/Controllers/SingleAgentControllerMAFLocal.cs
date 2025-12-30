@@ -6,6 +6,7 @@ using SingleAgentDemo.Services;
 using System.ComponentModel;
 using System.Text.Json;
 using ZavaAgentsMetadata;
+using ZavaMAFFoundry;
 
 namespace SingleAgentDemo.Controllers;
 
@@ -27,7 +28,7 @@ public class SingleAgentControllerMAFLocal : ControllerBase
 
     public SingleAgentControllerMAFLocal(
         ILogger<SingleAgentControllerMAFLocal> logger,
-        IChatClient chatClient,
+        MAFFoundryAgentProvider foundryAgentProvider,
         AnalyzePhotoService analyzePhotoService,
         CustomerInformationService customerInformationService,
         ToolReasoningService toolReasoningService,
@@ -70,6 +71,7 @@ When analyzing a request:
 
 Always call the tools in this order for best results.";
 
+        IChatClient chatClient = foundryAgentProvider.GetChatClient();
         _orchestratorAgent = chatClient.CreateAIAgent(
             name: "OrchestratorAgent",
             instructions: instructions, 

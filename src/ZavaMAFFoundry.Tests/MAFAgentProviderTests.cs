@@ -1,6 +1,7 @@
-using Moq;
-using Azure.AI.Projects;
-using ZavaAgentsMetadata;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
 
 namespace ZavaMAFFoundry.Tests;
 
@@ -12,9 +13,16 @@ public class MAFAgentProviderTests
     {
         // Arrange
         var endpoint = "https://test.foundry.endpoint.com";
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                { "AI_ChatDeploymentName", "gpt-5-mini" },
+                { "AI_embeddingsDeploymentName", "text-embedding-3-small" }
+            })
+            .Build();
 
         // Act
-        var provider = new MAFFoundryAgentProvider(endpoint);
+        var provider = new MAFFoundryAgentProvider(endpoint, configuration);
 
         // Assert
         Assert.IsNotNull(provider);
@@ -25,11 +33,12 @@ public class MAFAgentProviderTests
     {
         // Arrange
         var invalidEndpoint = "not-a-valid-url";
+        var configuration = new ConfigurationBuilder().Build();
 
         // Act & Assert
         try
         {
-            var provider = new MAFFoundryAgentProvider(invalidEndpoint);
+            var provider = new MAFFoundryAgentProvider(invalidEndpoint, configuration);
             Assert.Fail("Expected UriFormatException was not thrown");
         }
         catch (UriFormatException)
@@ -43,7 +52,8 @@ public class MAFAgentProviderTests
     {
         // Arrange
         var endpoint = "https://test.foundry.endpoint.com";
-        var provider = new MAFFoundryAgentProvider(endpoint);
+        var configuration = new ConfigurationBuilder().Build();
+        var provider = new MAFFoundryAgentProvider(endpoint, configuration);
 
         // Act & Assert
         try
@@ -53,8 +63,8 @@ public class MAFAgentProviderTests
         }
         catch (ArgumentException ex)
         {
-            Assert.AreEqual("agentId", ex.ParamName);
-            Assert.IsTrue(ex.Message.Contains("Agent ID cannot be null or empty"));
+            Assert.AreEqual("agentName", ex.ParamName);
+            Assert.IsTrue(ex.Message.Contains("Agent Name cannot be null or empty"));
         }
     }
 
@@ -63,7 +73,8 @@ public class MAFAgentProviderTests
     {
         // Arrange
         var endpoint = "https://test.foundry.endpoint.com";
-        var provider = new MAFFoundryAgentProvider(endpoint);
+        var configuration = new ConfigurationBuilder().Build();
+        var provider = new MAFFoundryAgentProvider(endpoint, configuration);
 
         // Act & Assert
         try
@@ -73,8 +84,8 @@ public class MAFAgentProviderTests
         }
         catch (ArgumentException ex)
         {
-            Assert.AreEqual("agentId", ex.ParamName);
-            Assert.IsTrue(ex.Message.Contains("Agent ID cannot be null or empty"));
+            Assert.AreEqual("agentName", ex.ParamName);
+            Assert.IsTrue(ex.Message.Contains("Agent Name cannot be null or empty"));
         }
     }
 
@@ -83,7 +94,8 @@ public class MAFAgentProviderTests
     {
         // Arrange
         var endpoint = "https://test.foundry.endpoint.com";
-        var provider = new MAFFoundryAgentProvider(endpoint);
+        var configuration = new ConfigurationBuilder().Build();
+        var provider = new MAFFoundryAgentProvider(endpoint, configuration);
 
         // Act & Assert
         try
@@ -93,8 +105,8 @@ public class MAFAgentProviderTests
         }
         catch (ArgumentException ex)
         {
-            Assert.AreEqual("agentId", ex.ParamName);
-            Assert.IsTrue(ex.Message.Contains("Agent ID cannot be null or empty"));
+            Assert.AreEqual("agentName", ex.ParamName);
+            Assert.IsTrue(ex.Message.Contains("Agent Name cannot be null or empty"));
         }
     }
 
@@ -103,7 +115,8 @@ public class MAFAgentProviderTests
     {
         // Arrange
         var endpoint = "https://test.foundry.endpoint.com";
-        var provider = new MAFFoundryAgentProvider(endpoint);
+        var configuration = new ConfigurationBuilder().Build();
+        var provider = new MAFFoundryAgentProvider(endpoint, configuration);
 
         // Act & Assert
         try
@@ -113,8 +126,8 @@ public class MAFAgentProviderTests
         }
         catch (ArgumentException ex)
         {
-            Assert.AreEqual("agentId", ex.ParamName);
-            Assert.IsTrue(ex.Message.Contains("Agent ID cannot be null or empty"));
+            Assert.AreEqual("agentName", ex.ParamName);
+            Assert.IsTrue(ex.Message.Contains("Agent Name cannot be null or empty"));
         }
     }
 
@@ -123,7 +136,8 @@ public class MAFAgentProviderTests
     {
         // Arrange
         var endpoint = "https://test.foundry.endpoint.com";
-        var provider = new MAFFoundryAgentProvider(endpoint);
+        var configuration = new ConfigurationBuilder().Build();
+        var provider = new MAFFoundryAgentProvider(endpoint, configuration);
 
         // Act & Assert
         try
@@ -133,8 +147,8 @@ public class MAFAgentProviderTests
         }
         catch (ArgumentException ex)
         {
-            Assert.AreEqual("agentId", ex.ParamName);
-            Assert.IsTrue(ex.Message.Contains("Agent ID cannot be null or empty"));
+            Assert.AreEqual("agentName", ex.ParamName);
+            Assert.IsTrue(ex.Message.Contains("Agent Name cannot be null or empty"));
         }
     }
 
@@ -143,7 +157,8 @@ public class MAFAgentProviderTests
     {
         // Arrange
         var endpoint = "https://test.foundry.endpoint.com";
-        var provider = new MAFFoundryAgentProvider(endpoint);
+        var configuration = new ConfigurationBuilder().Build();
+        var provider = new MAFFoundryAgentProvider(endpoint, configuration);
 
         // Act & Assert
         try
@@ -153,8 +168,8 @@ public class MAFAgentProviderTests
         }
         catch (ArgumentException ex)
         {
-            Assert.AreEqual("agentId", ex.ParamName);
-            Assert.IsTrue(ex.Message.Contains("Agent ID cannot be null or empty"));
+            Assert.AreEqual("agentName", ex.ParamName);
+            Assert.IsTrue(ex.Message.Contains("Agent Name cannot be null or empty"));
         }
     }
 
@@ -163,7 +178,8 @@ public class MAFAgentProviderTests
     {
         // Arrange
         var endpoint = "https://test.foundry.endpoint.com";
-        var provider = new MAFFoundryAgentProvider(endpoint);
+        var configuration = new ConfigurationBuilder().Build();
+        var provider = new MAFFoundryAgentProvider(endpoint, configuration);
         var validAgentId = "test-agent-id";
 
         // Act & Assert
@@ -173,7 +189,7 @@ public class MAFAgentProviderTests
             // If we get here without ArgumentException, validation passed
             Assert.IsNotNull(agent);
         }
-        catch (ArgumentException ex) when (ex.Message.Contains("Agent ID cannot be null or empty"))
+        catch (ArgumentException ex) when (ex.Message.Contains("Agent Name cannot be null or empty"))
         {
             Assert.Fail("Should not throw ArgumentException for valid agent ID");
         }
@@ -189,7 +205,8 @@ public class MAFAgentProviderTests
     {
         // Arrange
         var endpoint = "https://test.foundry.endpoint.com";
-        var provider = new MAFFoundryAgentProvider(endpoint);
+        var configuration = new ConfigurationBuilder().Build();
+        var provider = new MAFFoundryAgentProvider(endpoint, configuration);
         var validAgentId = "test-agent-id";
 
         // Act & Assert
@@ -199,7 +216,7 @@ public class MAFAgentProviderTests
             // If we get here without ArgumentException, validation passed
             Assert.IsNotNull(agent);
         }
-        catch (ArgumentException ex) when (ex.Message.Contains("Agent ID cannot be null or empty"))
+        catch (ArgumentException ex) when (ex.Message.Contains("Agent Name cannot be null or empty"))
         {
             Assert.Fail("Should not throw ArgumentException for valid agent ID");
         }

@@ -1,26 +1,29 @@
-﻿using SharedEntities;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.VectorData;
 using Microsoft.SemanticKernel.Connectors.InMemory;
 using Newtonsoft.Json;
-using ZavaDatabaseInitialization;
 using SearchEntities;
+using SharedEntities;
 using System.Text;
 using VectorEntities;
+using ZavaDatabaseInitialization;
 
 namespace DataService.Memory;
 
 public class MemoryContext
 {
     private ILogger _logger;
-    public IChatClient? _chatClient;
-    public IEmbeddingGenerator<string, Embedding<float>>? _embeddingGenerator;
-    public VectorStoreCollection<int, ProductVector>? _productsCollection;
+    private readonly IChatClient? _chatClient;
+    private readonly IEmbeddingGenerator<string, Embedding<float>>? _embeddingGenerator;
+    private VectorStoreCollection<int, ProductVector>? _productsCollection;
     private string _systemPrompt = "";
     private bool _isMemoryCollectionInitialized = false;
 
-    public MemoryContext(ILogger logger, IChatClient? chatClient, IEmbeddingGenerator<string, Embedding<float>>? embeddingGenerator)
+    public MemoryContext(
+        ILogger logger,
+        IChatClient? chatClient,
+        IEmbeddingGenerator<string, Embedding<float>>? embeddingGenerator)
     {
         _logger = logger;
         _chatClient = chatClient;
@@ -65,8 +68,8 @@ public class MemoryContext
                     ImageUrl = product.ImageUrl
                 };
                 var result = await _embeddingGenerator.GenerateVectorAsync(productInfo);
-
                 productVector.Vector = result.ToArray();
+
                 await _productsCollection.UpsertAsync(productVector);
                 _logger.LogInformation("Product added to memory: {Product}", product.Name);
             }
@@ -128,7 +131,7 @@ Include products details.
     - Found Products: 
 {sbFoundProducts}";
 
-            var messages = new List<ChatMessage>
+            var messages = new List<Microsoft.Extensions.AI.ChatMessage>
             {
                 new(ChatRole.System, _systemPrompt),
                 new(ChatRole.System, prompt)
