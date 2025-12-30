@@ -6,7 +6,6 @@ using Azure.Identity;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Hosting;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
