@@ -36,21 +36,6 @@ public class MemoryContext
         _logger.LogInformation($"Embedding Generator is null: {_embeddingGenerator is null}");
     }
 
-    //public MemoryContext(
-    //    ILogger logger,
-    //    MAFFoundryAgentProvider foundryAgentProvider)
-    //{
-    //    _logger = logger;
-
-    //    // get the chat client and embedding generator from the foundry agent provider
-    //    _chatClient = foundryAgentProvider.GetChatClient();
-    //    _embeddingGenerator = foundryAgentProvider.GetEmbeddingGenerator();
-
-    //    _logger.LogInformation("Memory context created");
-    //    _logger.LogInformation($"Chat Client is null: {_chatClient is null}");
-    //    _logger.LogInformation($"Embedding Generator is null: {_embeddingGenerator is null}");
-    //}
-
     public async Task<bool> InitMemoryContextAsync(Context db)
     {
         _logger.LogInformation("Initializing memory context");
