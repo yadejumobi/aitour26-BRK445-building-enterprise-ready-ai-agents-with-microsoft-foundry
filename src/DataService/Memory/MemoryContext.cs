@@ -3,7 +3,6 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.VectorData;
 using Microsoft.SemanticKernel.Connectors.InMemory;
 using Newtonsoft.Json;
-using OpenAI.Chat;
 using SearchEntities;
 using SharedEntities;
 using System.Text;
