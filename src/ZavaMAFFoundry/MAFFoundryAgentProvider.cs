@@ -2,6 +2,7 @@
 
 using Azure.AI.OpenAI;
 using Azure.AI.Projects;
+using Azure.Core;
 using Azure.Identity;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Hosting;
@@ -186,13 +187,17 @@ public static class MAFFoundryAgentExtensions
 
         logger?.LogInformation("Registering MAF Foundry agents from endpoint: {Endpoint}", projectEndpoint);
 
-        var credentialOptions = new DefaultAzureCredentialOptions();
+        logger?.LogInformation("Creating [DefaultAzureCredential]");
+        TokenCredential tokenCredential = new DefaultAzureCredential();
+
         if (!string.IsNullOrEmpty(tenantId))
         {
+            logger?.LogInformation($"Creating [DefaultAzureCredential] Using tenant ID: {tenantId} for Azure credentials");
+            var credentialOptions = new DefaultAzureCredentialOptions();
             credentialOptions = new DefaultAzureCredentialOptions()
             { TenantId = tenantId };
+            tokenCredential = new DefaultAzureCredential(options: credentialOptions);
         }
-        var tokenCredential = new DefaultAzureCredential(options: credentialOptions);
 
         AIProjectClient projectClient = new(
             endpoint: new Uri(projectEndpoint),
