@@ -199,8 +199,8 @@ public static class MAFFoundryAgentExtensions
         }
         else
         {
-            logger?.LogInformation("Creating [AzureCliCredential] for Azure credentials since tenant ID is not provided or tenantid is too short");
-            tokenCredential = new AzureCliCredential();
+            logger?.LogInformation("Creating [DefaultAzureCredential] for Azure credentials without tenant ID, since tenant ID is not provided or tenantid is too short");
+            tokenCredential = new DefaultAzureCredential();
         }
 
         AIProjectClient projectClient = new(
