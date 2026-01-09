@@ -13,7 +13,7 @@ Prior to delivering the workshop please:
 | Resource | Link | Type | Description |
 |---|---|---:|---|
 | Session Delivery Deck | [Deck](https://aka.ms/AAxri1f) | External | Main slide deck for the session |
-| Full Session Recording | [Recording CodeSpaces](https://aka.ms/AAxrpql) | External | Full train-the-trainer recorded session |
+| Full Session Recording | [Recording CodeSpaces](https://youtu.be/ReWkkXbnF7I) | External | Full train-the-trainer recorded session |
 | Demo source code | [`/src` demo source](../src) | Internal | Demo source code used in the live demos |
 | Prerequisites | [`Prerequisites`](./docs/Prerequisites.md) | Internal | Tooling and access required to run the demos |
 | Cloud Resources | [`Needed Cloud Resources`](./docs/02.NeededCloudResources.md) | Internal | Cloud resources required to run the demos |
@@ -55,3 +55,4 @@ Fallback & recording guidance
 
 - If a live demo fails (service doesn't start, index not ready, or external resource is inaccessible) — play the recorded demo clip for that segment and mark the runbook with the issue.
 - For fragile demos (search/indexing, external APIs), prefer the recorded fallback during high-risk sessions.
+
